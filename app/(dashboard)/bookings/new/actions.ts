@@ -8,13 +8,13 @@ import { mapRpcError } from "@/lib/rpc-errors";
 import type { CreateBookingResult } from "@/lib/types/database";
 
 export type CreateBookingActionResult =
-  | { ok: true; reference: string }
+  | { ok: true; reference: string; returnReference?: string }
   | { ok: false; message: string };
 
 export async function createBookingAction(
   input: NewBookingInput
 ): Promise<CreateBookingActionResult> {
-  await getProfile(); // must be active staff; the RPC re-checks
+  await getProfile();
   const parsed = newBookingSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0].message };
@@ -34,6 +34,13 @@ export async function createBookingAction(
     p_customer_name: d.customer.full_name,
     p_customer_phone: d.customer.phone,
     p_customer_email: d.customer.email || null,
+    p_return_flight_id: d.return_flight_id ?? null,
+    p_return_cabin_class: d.return_cabin_class ?? null,
+    p_discount_type: d.discount_type,
+    p_discount_value: d.discount_value,
+    p_discount_reason: d.discount_reason || null,
+    p_extra_baggage_kg: d.extra_baggage_kg,
+    p_extra_baggage_fee: d.extra_baggage_fee,
   });
 
   if (error) return { ok: false, message: mapRpcError(error.message) };
@@ -41,7 +48,11 @@ export async function createBookingAction(
   const result = data as CreateBookingResult;
   revalidatePath("/flights");
   revalidatePath("/bookings");
-  return { ok: true, reference: result.reference };
+  return {
+    ok: true,
+    reference: result.reference,
+    returnReference: result.return_reference ?? undefined,
+  };
 }
 
 export async function checkDuplicatePending(
