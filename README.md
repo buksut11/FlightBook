@@ -1,43 +1,39 @@
 # Flight Booking System
 
-Internal flight ticket booking system for staff (admin / agent roles).
+Internal staff-only flight ticket booking app for a travel agency running its own inventory.
+Next.js 15 (App Router) + Supabase (Postgres, Auth, Storage, RLS) + Tailwind + shadcn/ui.
 
-Built with Next.js 15 (App Router, TypeScript strict), Supabase (`@supabase/supabase-js` + `@supabase/ssr`), Tailwind CSS, shadcn/ui, next-themes (light/dark), Zod, and Vitest.
+## Features
+- Email/password staff login (admin + agent roles), no public signup
+- Flight, airport, and aircraft management (admin)
+- One-way and round-trip bookings with a guided wizard
+- Customer records with phone-lookup autofill and booking history
+- Manual mobile-money / cash payments with automatic confirmation
+- Discounts, extra baggage, per-class seat inventory (no oversell — enforced in Postgres)
+- Printable A5 PDF tickets
+- Dashboard + admin reports with CSV export
+- Staff management (create accounts, reset passwords, deactivate)
+- Profile avatars (Supabase Storage)
 
-## What's implemented (Plan 1: Foundation & Authentication)
+## Local setup
+1. `npm install`
+2. Create a Supabase project; copy `.env.example` to `.env.local` and fill in the URL, anon key, and service-role key.
+3. In the Supabase SQL Editor, run the migrations in `supabase/migrations/` in filename order (0001 → 0007).
+4. Create the `avatars` storage bucket (public) — see `supabase/migrations/0007_avatars_storage.sql` for its policies.
+5. Create the first admin: add an auth user in the dashboard, then run `supabase/seed/first_admin.sql` with its UUID.
+6. (Optional) run `supabase/seed/demo_data.sql` for sample flights.
+7. `npm run dev`
 
-- Next.js 15 scaffold with the spec palette (sky-blue primary `#0284c7` / `#38bdf8` dark, slate backgrounds) and a light/dark theme toggle.
-- Supabase browser + server clients and middleware that refreshes sessions and redirects unauthenticated users to `/login`.
-- `profiles` table migration with `is_admin()` / `is_active_staff()` role helpers and RLS policies (`supabase/migrations/0001_profiles.sql`).
-- Login page with Zod-validated server actions and a deactivated-account guard (deactivated staff are signed out and locked out).
-- Protected dashboard shell: role-aware sidebar (admin sees Reports + Settings), mobile bottom nav, user menu with sign-out.
+## Tests
+- Unit: `npm test` (Vitest)
+- End-to-end: `npm run e2e` (Playwright; requires the E2E_* env vars and two active accounts)
 
-## One-time Supabase setup (manual)
+## Deployment
+Push to GitHub, import into Vercel (Next.js preset), set the env vars documented in
+`.env.production.example`, and set the Vercel URL as the Site URL in Supabase
+Authentication → URL Configuration.
 
-The app needs a Supabase project; these steps are done once in the [Supabase dashboard](https://supabase.com):
-
-1. **Create the project.** New Project → name `flight-booking`, strong DB password, nearest region. Under Project Settings → API, copy the Project URL and `anon` key.
-2. **Lock down sign-ups.** Authentication → Providers: ensure Email is enabled. Authentication → Sign In / Up: **disable** "Allow new users to sign up" (staff are created by the admin only).
-3. **Configure env vars.** Copy `.env.example` to `.env.local` and fill in the real values. Never commit `.env.local` or expose `SUPABASE_SERVICE_ROLE_KEY` to the client.
-4. **Apply the migration.** SQL Editor → paste the contents of `supabase/migrations/0001_profiles.sql` → Run. Expect "Success. No rows returned."
-5. **Create the first admin.** Authentication → Users → "Add user" (email + password, check "Auto Confirm User"), copy the new user's UUID, then run `supabase/seed/first_admin.sql` in the SQL Editor with the real UUID and name.
-
-## Development
-
-```bash
-npm install
-npm run dev     # http://localhost:3000 — redirects to /login when signed out
-npm test        # Vitest unit tests
-npm run build   # production build (type-checks)
-```
-
-Requires Node ≥ 20.
-
-## Project layout
-
-- `app/login/` — login page + `login` / `logout` server actions
-- `app/(dashboard)/` — protected route group; all future screens live here
-- `lib/supabase/` — `createClient()` for browser, server, and middleware
-- `lib/auth/get-profile.ts` — loads the signed-in staff profile (redirects if missing/inactive)
-- `components/nav-links.ts` — role-aware navigation definition later plans extend
-- `supabase/migrations/` — numbered SQL applied via the Dashboard SQL Editor
+## Known limitations / future work
+- Dev and prod share one Supabase project; split them for a larger deployment.
+- Payments are recorded manually; WaafiPay API integration is a future addition (the schema already isolates payment records).
+- Reporting currency is assumed USD in a few labels; make fully multi-currency if needed.

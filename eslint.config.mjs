@@ -20,6 +20,11 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    // Playwright fixtures use a `use` callback that trips the React hooks rule.
+    files: ["e2e/**"],
+    rules: { "react-hooks/rules-of-hooks": "off" },
+  },
 ];
 
 export default eslintConfig;
