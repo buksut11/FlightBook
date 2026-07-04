@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/auth/get-profile";
 import { createClient } from "@/lib/supabase/server";
@@ -37,6 +38,16 @@ export default async function BookingDetailPage({
   if (!booking) notFound();
   const b = booking as BookingDetail;
 
+  const linked = b.linked_booking_id
+    ? (
+        await supabase
+          .from("bookings")
+          .select("*, flights(flight_number, departure_at)")
+          .eq("id", b.linked_booking_id)
+          .single()
+      ).data as (Booking & { flights: { flight_number: string; departure_at: string } | null }) | null
+    : null;
+
   const paid = (payments as Payment[] | null)?.reduce((sum, p) => sum + p.amount, 0) ?? 0;
   const balance = Math.max(0, b.total_amount - paid);
 
@@ -54,12 +65,29 @@ export default async function BookingDetailPage({
         </div>
         <div className="flex gap-2">
           {canPay && <PaymentDialog bookingId={b.id} balance={balance} />}
-          {canCancel && <CancelDialog bookingId={b.id} reference={b.reference} />}
+          {canCancel && <CancelDialog bookingId={b.id} reference={b.reference} isRoundTrip={b.trip_type === "round_trip"} />}
           {/* Plan 7 adds a "Print ticket" button here. */}
         </div>
       </div>
 
-      {/* Plan 6 adds a "linked round-trip leg" card here when b.linked_booking_id is set. */}
+      {linked && (
+        <Card>
+          <CardHeader><CardTitle>Linked round-trip leg</CardTitle></CardHeader>
+          <CardContent className="flex items-center justify-between text-sm">
+            <div>
+              <Link href={`/bookings/${linked.id}`} className="font-mono text-primary hover:underline">
+                {linked.reference}
+              </Link>
+              {linked.flights && (
+                <span className="ml-2 text-muted-foreground">
+                  {linked.flights.flight_number} · {formatDateTime(linked.flights.departure_at)}
+                </span>
+              )}
+            </div>
+            <StatusBadge status={linked.status} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Flight</CardTitle></CardHeader>
