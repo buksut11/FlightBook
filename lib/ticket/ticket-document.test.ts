@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { createElement } from "react";
-import { renderToBuffer } from "@react-pdf/renderer";
+import { createElement, type ReactElement } from "react";
+import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { TicketDocument } from "./ticket-document";
 import type { TicketData } from "./load-ticket";
 
@@ -31,7 +31,12 @@ const base: TicketData = {
 };
 
 async function renderTicket(data: TicketData): Promise<Buffer> {
-  return renderToBuffer(createElement(TicketDocument, { data }));
+  // Cast: @react-pdf's renderToBuffer wants ReactElement<DocumentProps>, but
+  // TicketDocument's props are { data } — the JSX form in the route has the
+  // same shape and react-pdf renders it fine.
+  return renderToBuffer(
+    createElement(TicketDocument, { data }) as ReactElement<DocumentProps>
+  );
 }
 
 describe("TicketDocument", () => {
