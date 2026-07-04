@@ -5,7 +5,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 const SECTIONS = [
   { href: "/settings/airports", title: "Airports", description: "Codes, names, and cities" },
   { href: "/settings/aircraft", title: "Aircraft", description: "Models and default seat capacity" },
-  // Staff management is added in Plan 9.
+  { href: "/settings/staff", title: "Staff", description: "Create accounts, reset passwords, deactivate" },
 ];
 
 export default async function SettingsPage() {
