@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { PaymentDialog } from "./payment-dialog";
 import { CancelDialog } from "./cancel-dialog";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
@@ -56,6 +57,13 @@ export default async function BookingDetailPage({
     (profile.role === "admin" || (b.created_by === profile.id && b.status === "pending"));
   const canPay = b.status !== "cancelled" && balance > 0;
 
+  // For round trips, print from the outbound leg (earliest departure).
+  const ticketId =
+    linked && b.flights && linked.flights &&
+    new Date(linked.flights.departure_at) < new Date(b.flights.departure_at)
+      ? linked.id
+      : b.id;
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -66,7 +74,14 @@ export default async function BookingDetailPage({
         <div className="flex gap-2">
           {canPay && <PaymentDialog bookingId={b.id} balance={balance} />}
           {canCancel && <CancelDialog bookingId={b.id} reference={b.reference} isRoundTrip={b.trip_type === "round_trip"} />}
-          {/* Plan 7 adds a "Print ticket" button here. */}
+          <Button
+            variant="outline"
+            render={
+              <a href={`/bookings/${ticketId}/ticket`} target="_blank" rel="noopener noreferrer">
+                Print ticket
+              </a>
+            }
+          />
         </div>
       </div>
 
