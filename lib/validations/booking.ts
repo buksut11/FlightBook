@@ -41,4 +41,5 @@ export const newBookingSchema = z
   });
 
 export type PassengerInput = z.infer<typeof passengerSchema>;
-export type NewBookingInput = z.infer<typeof newBookingSchema>;
+// Input shape (pre-parse): fields with defaults are optional for callers.
+export type NewBookingInput = z.input<typeof newBookingSchema>;
