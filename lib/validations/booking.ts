@@ -17,12 +17,28 @@ export const customerInputSchema = z.object({
   email: z.string().trim().email().optional().or(z.literal("")),
 });
 
-export const newBookingSchema = z.object({
-  flight_id: uuidField(),
-  cabin_class: z.enum(["economy", "business"]),
-  customer: customerInputSchema,
-  passengers: z.array(passengerSchema).min(1, "Add at least one passenger").max(9),
-});
+export const newBookingSchema = z
+  .object({
+    flight_id: uuidField(),
+    cabin_class: z.enum(["economy", "business"]),
+    customer: customerInputSchema,
+    passengers: z.array(passengerSchema).min(1, "Add at least one passenger").max(9),
+    return_flight_id: uuidField().optional(),
+    return_cabin_class: z.enum(["economy", "business"]).optional(),
+    discount_type: z.enum(["none", "percent", "fixed"]).default("none"),
+    discount_value: z.coerce.number().min(0).default(0),
+    discount_reason: z.string().trim().optional().or(z.literal("")),
+    extra_baggage_kg: z.coerce.number().int().min(0).default(0),
+    extra_baggage_fee: z.coerce.number().min(0).default(0),
+  })
+  .refine((d) => !d.return_flight_id || !!d.return_cabin_class, {
+    message: "Choose a cabin class for the return flight",
+    path: ["return_cabin_class"],
+  })
+  .refine((d) => d.discount_type === "none" || d.discount_value > 0, {
+    message: "Enter a discount value",
+    path: ["discount_value"],
+  });
 
 export type PassengerInput = z.infer<typeof passengerSchema>;
 export type NewBookingInput = z.infer<typeof newBookingSchema>;

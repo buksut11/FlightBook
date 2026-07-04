@@ -30,3 +30,53 @@ describe("newBookingSchema", () => {
     expect(newBookingSchema.safeParse({ ...valid, cabin_class: "first" }).success).toBe(false);
   });
 });
+
+describe("newBookingSchema — round trip & extras", () => {
+  const base = {
+    flight_id: "11111111-1111-1111-1111-111111111111",
+    cabin_class: "economy",
+    customer: { full_name: "Asha Ali", phone: "0907000001", email: "" },
+    passengers: [{ full_name: "Asha Ali", id_number: "", passenger_type: "adult" }],
+  };
+
+  it("accepts a round trip with a return flight and cabin class", () => {
+    const r = newBookingSchema.safeParse({
+      ...base,
+      return_flight_id: "22222222-2222-2222-2222-222222222222",
+      return_cabin_class: "economy",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a return flight without a return cabin class", () => {
+    const r = newBookingSchema.safeParse({
+      ...base,
+      return_flight_id: "22222222-2222-2222-2222-222222222222",
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("accepts a percent discount with a reason", () => {
+    const r = newBookingSchema.safeParse({
+      ...base, discount_type: "percent", discount_value: "10", discount_reason: "loyal customer",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects a negative discount value", () => {
+    const r = newBookingSchema.safeParse({ ...base, discount_type: "fixed", discount_value: "-5" });
+    expect(r.success).toBe(false);
+  });
+
+  it("accepts extra baggage kg and fee", () => {
+    const r = newBookingSchema.safeParse({ ...base, extra_baggage_kg: "10", extra_baggage_fee: "15" });
+    expect(r.success).toBe(true);
+  });
+
+  it("defaults discount_type to none and extras to zero when omitted", () => {
+    const r = newBookingSchema.parse(base);
+    expect(r.discount_type).toBe("none");
+    expect(r.extra_baggage_kg).toBe(0);
+    expect(r.extra_baggage_fee).toBe(0);
+  });
+});
