@@ -35,9 +35,16 @@ export default async function BookingsPage({
   if (status) query = query.eq("status", status);
   if (agent) query = query.eq("created_by", agent);
   if (q) {
-    query = query.or(
-      `reference.ilike.%${q}%,customers.full_name.ilike.%${q}%,customers.phone.ilike.%${q}%`
-    );
+    // PostgREST can't OR a base column with embedded-table columns in one filter,
+    // so resolve matching customers first, then OR on base columns only.
+    const { data: matched } = await supabase
+      .from("customers")
+      .select("id")
+      .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
+    const ids = (matched ?? []).map((c) => c.id);
+    const orParts = [`reference.ilike.%${q}%`];
+    if (ids.length > 0) orParts.push(`customer_id.in.(${ids.join(",")})`);
+    query = query.or(orParts.join(","));
   }
 
   const { data: bookings } = await query;
