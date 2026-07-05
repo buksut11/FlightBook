@@ -47,6 +47,10 @@ export interface Flight {
   arrival_at: string;
   price_economy: number;
   price_business: number | null;
+  price_economy_child: number | null;
+  price_economy_infant: number | null;
+  price_business_child: number | null;
+  price_business_infant: number | null;
   seats_total_economy: number;
   seats_available_economy: number;
   seats_total_business: number;
@@ -85,6 +89,7 @@ export interface Booking {
   discount_reason: string | null;
   extra_baggage_kg: number;
   extra_baggage_fee: number;
+  carried_balance: number;
   total_amount: number;
   currency: string;
   status: BookingStatus;
@@ -127,5 +132,59 @@ export interface CreateBookingResult {
   reference: string;
   return_booking_id: string | null;
   return_reference: string | null;
+  carried_balance: number;
   combined_total: number;
+}
+
+export interface BalanceTransfer {
+  id: string;
+  from_booking_id: string;
+  to_booking_id: string;
+  amount: number;
+  created_by: string;
+  created_at: string;
+  voided_at: string | null;
+  voided_by: string | null;
+}
+
+/** Row of the booking_balances view: pair-aware money position per booking. */
+export interface BookingBalance {
+  id: string;
+  customer_id: string;
+  reference: string;
+  status: BookingStatus;
+  currency: string;
+  created_at: string;
+  is_return_leg: boolean;
+  carried_balance: number;
+  amount_due: number;
+  amount_paid: number;
+  transferred_out: number;
+  balance: number;
+}
+
+/** Row of the customer_balances view: per-customer financial summary. */
+export interface CustomerBalance {
+  customer_id: string;
+  full_name: string;
+  phone: string;
+  total_charged: number;
+  total_paid: number;
+  outstanding: number;
+  currency: string | null;
+}
+
+export type StatementEntryType = "charge" | "payment" | "balance_carried";
+
+/** Row of the customer_statement_entries view: one ledger line per event. */
+export interface StatementEntry {
+  customer_id: string;
+  entry_at: string;
+  entry_type: StatementEntryType;
+  booking_id: string;
+  reference: string;
+  description: string;
+  debit: number;
+  credit: number;
+  currency: string;
 }

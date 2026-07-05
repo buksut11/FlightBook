@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createBookingAction, checkDuplicatePending } from "./actions";
 import type { FlightRow } from "@/app/(dashboard)/flights/flight-query";
-import type { CabinClass, Customer, TripType, DiscountType } from "@/lib/types/database";
+import type { CabinClass, Customer, PassengerType, TripType, DiscountType } from "@/lib/types/database";
 import type { PassengerInput } from "@/lib/validations/booking";
+import { fareFor, legSubtotal } from "@/lib/pricing";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,16 +40,18 @@ function cabinItems(f: FlightRow) {
   return [
     {
       value: "economy",
-      label: `Economy — ${formatMoney(f.price_economy, f.currency)} (${f.seats_available_economy} left)`,
+      label: `Economy — ${formatMoney(f.price_economy, f.currency)} adult (${f.seats_available_economy} left)`,
     },
     ...(f.price_business !== null
       ? [{
           value: "business",
-          label: `Business — ${formatMoney(f.price_business, f.currency)} (${f.seats_available_business} left)`,
+          label: `Business — ${formatMoney(f.price_business, f.currency)} adult (${f.seats_available_business} left)`,
         }]
       : []),
   ];
 }
+
+const PASSENGER_TYPES: PassengerType[] = ["adult", "child", "infant"];
 
 export function Wizard({ flights }: { flights: FlightRow[] }) {
   const router = useRouter();
@@ -62,6 +65,7 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [passengers, setPassengers] = useState<PassengerInput[]>([{ ...emptyPassenger }]);
+  const [prevBalance, setPrevBalance] = useState(0);
   const [flightFilter, setFlightFilter] = useState("");
   const [duplicateRef, setDuplicateRef] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,10 +87,7 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
   const seatsLeft = flight
     ? cabin === "economy" ? flight.seats_available_economy : flight.seats_available_business
     : 0;
-  const unitPrice = flight
-    ? cabin === "economy" ? flight.price_economy : (flight.price_business ?? 0)
-    : 0;
-  const subtotal = unitPrice * passengers.length;
+  const subtotal = flight ? legSubtotal(flight, cabin, passengers) : 0;
 
   const returnFlight = useMemo(
     () => flights.find((f) => f.id === returnFlightId) ?? null,
@@ -96,16 +97,27 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
     () => flight ? flights.filter((f) => f.id !== flight.id && new Date(f.departure_at) > new Date(flight.departure_at)) : [],
     [flights, flight]
   );
-  const returnUnitPrice = returnFlight
-    ? returnCabin === "economy" ? returnFlight.price_economy : (returnFlight.price_business ?? 0)
-    : 0;
-  const returnSubtotal = tripType === "round_trip" && returnFlight ? returnUnitPrice * passengers.length : 0;
+  const returnSubtotal =
+    tripType === "round_trip" && returnFlight ? legSubtotal(returnFlight, returnCabin, passengers) : 0;
   const combinedSubtotal = subtotal + returnSubtotal;
   const discountAmount =
     discountType === "percent" ? Math.min(combinedSubtotal, (combinedSubtotal * Number(discountValue || 0)) / 100)
     : discountType === "fixed" ? Math.min(combinedSubtotal, Number(discountValue || 0))
     : 0;
   const grandTotal = combinedSubtotal - discountAmount + Number(extraBaggageFee || 0);
+  // Server-side, create_booking rolls the customer's previous unpaid balance
+  // into the new total; mirror that here so the agent sees the real amount due.
+  const totalDue = grandTotal + prevBalance;
+
+  // Per-type fare lines for both legs combined, e.g. "2 × Adult — $240".
+  const fareBreakdown = PASSENGER_TYPES.map((t) => {
+    const count = passengers.filter((p) => p.passenger_type === t).length;
+    if (count === 0 || !flight) return null;
+    const each =
+      fareFor(flight, cabin, t) +
+      (tripType === "round_trip" && returnFlight ? fareFor(returnFlight, returnCabin, t) : 0);
+    return { type: t, count, amount: each * count };
+  }).filter((x): x is { type: PassengerType; count: number; amount: number } => x !== null);
 
   const filteredFlights = flights.filter((f) => {
     const s = `${f.flight_number} ${f.origin?.code} ${f.origin?.city} ${f.destination?.code} ${f.destination?.city}`.toLowerCase();
@@ -115,6 +127,7 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
   async function lookupCustomer(p: string) {
     setPhone(p);
     setCustomerId(undefined);
+    setPrevBalance(0);
     if (p.trim().length < 6) return;
     const supabase = createClient();
     const { data } = await supabase
@@ -127,6 +140,12 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
       if (passengers.length === 1 && passengers[0].full_name === "") {
         setPassengers([{ ...emptyPassenger, full_name: c.full_name }]);
       }
+      const { data: bal } = await supabase
+        .from("customer_balances")
+        .select("outstanding")
+        .eq("customer_id", c.id)
+        .maybeSingle();
+      setPrevBalance(Math.max(0, Number(bal?.outstanding ?? 0)));
     }
   }
 
@@ -291,6 +310,12 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
               {customerId && (
                 <p className="text-xs text-green-600">Existing customer found — details filled.</p>
               )}
+              {customerId && prevBalance > 0 && flight && (
+                <p className="text-xs text-amber-600">
+                  Unpaid balance of {formatMoney(prevBalance, flight.currency)} from previous
+                  bookings — it will be added to this booking&apos;s total due.
+                </p>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="name">Customer name</Label>
@@ -410,9 +435,16 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
             </Button>
           </div>
 
-          <p className="text-sm font-medium">
-            Total{tripType === "round_trip" ? " (both legs)" : ""}: {formatMoney(grandTotal, flight.currency)}
-          </p>
+          <div className="text-sm font-medium">
+            <p>
+              Total{tripType === "round_trip" ? " (both legs)" : ""}: {formatMoney(grandTotal, flight.currency)}
+            </p>
+            {prevBalance > 0 && (
+              <p className="text-amber-600">
+                Total due incl. previous balance: {formatMoney(totalDue, flight.currency)}
+              </p>
+            )}
+          </div>
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(0)}>Back</Button>
@@ -448,10 +480,22 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
                 ))}
               </ul>
               <div className="mt-2 grid gap-0.5">
+                {fareBreakdown.map((fb) => (
+                  <p key={fb.type} className="capitalize text-muted-foreground">
+                    {fb.count} × {fb.type}: {formatMoney(fb.amount, flight.currency)}
+                  </p>
+                ))}
                 <p>Subtotal: {formatMoney(combinedSubtotal, flight.currency)}</p>
                 {discountAmount > 0 && <p>Discount: −{formatMoney(discountAmount, flight.currency)}</p>}
                 {Number(extraBaggageFee) > 0 && <p>Extra baggage: +{formatMoney(Number(extraBaggageFee), flight.currency)}</p>}
-                <p className="text-base font-semibold">Total: {formatMoney(grandTotal, flight.currency)}</p>
+                {prevBalance > 0 && (
+                  <p className="text-amber-600">
+                    Previous unpaid balance: +{formatMoney(prevBalance, flight.currency)}
+                  </p>
+                )}
+                <p className="text-base font-semibold">
+                  Total due: {formatMoney(totalDue, flight.currency)}
+                </p>
               </div>
               <p className="text-xs text-muted-foreground">
                 The booking is created as PENDING. Record the payment from the outbound booking&apos;s page to confirm{tripType === "round_trip" ? " both legs" : " it"}.

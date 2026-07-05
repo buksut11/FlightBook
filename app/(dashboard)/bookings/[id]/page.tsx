@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getProfile } from "@/lib/auth/get-profile";
 import { createClient } from "@/lib/supabase/server";
 import type {
-  Booking, BookingEvent, Customer, Flight, Passenger, Payment,
+  Booking, BookingBalance, BookingEvent, Customer, Flight, Passenger, Payment,
 } from "@/lib/types/database";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatMoney } from "@/lib/format";
@@ -14,6 +14,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 type BookingDetail = Booking & { customers: Customer | null; flights: Flight | null };
+type TransferIn = { amount: number; from: { id: string; reference: string } | null };
+type TransferOut = { amount: number; to: { id: string; reference: string } | null };
 
 export default async function BookingDetailPage({
   params,
@@ -24,17 +26,35 @@ export default async function BookingDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: booking }, { data: passengers }, { data: payments }, { data: events }] =
-    await Promise.all([
-      supabase.from("bookings").select("*, customers(*), flights(*)").eq("id", id).single(),
-      supabase.from("passengers").select("*").eq("booking_id", id),
-      supabase.from("payments").select("*").eq("booking_id", id).order("received_at"),
-      supabase
-        .from("booking_events")
-        .select("*, profiles(full_name)")
-        .eq("booking_id", id)
-        .order("created_at"),
-    ]);
+  const [
+    { data: booking },
+    { data: passengers },
+    { data: payments },
+    { data: events },
+    { data: balanceRow },
+    { data: transfersIn },
+    { data: transfersOut },
+  ] = await Promise.all([
+    supabase.from("bookings").select("*, customers(*), flights(*)").eq("id", id).single(),
+    supabase.from("passengers").select("*").eq("booking_id", id),
+    supabase.from("payments").select("*").eq("booking_id", id).order("received_at"),
+    supabase
+      .from("booking_events")
+      .select("*, profiles(full_name)")
+      .eq("booking_id", id)
+      .order("created_at"),
+    supabase.from("booking_balances").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("balance_transfers")
+      .select("amount, from:bookings!balance_transfers_from_booking_id_fkey(id, reference)")
+      .eq("to_booking_id", id)
+      .is("voided_at", null),
+    supabase
+      .from("balance_transfers")
+      .select("amount, to:bookings!balance_transfers_to_booking_id_fkey(id, reference)")
+      .eq("from_booking_id", id)
+      .is("voided_at", null),
+  ]);
 
   if (!booking) notFound();
   const b = booking as BookingDetail;
@@ -49,13 +69,22 @@ export default async function BookingDetailPage({
       ).data as (Booking & { flights: { flight_number: string; departure_at: string } | null }) | null
     : null;
 
-  const paid = (payments as Payment[] | null)?.reduce((sum, p) => sum + p.amount, 0) ?? 0;
-  const balance = Math.max(0, b.total_amount - paid);
+  // Pair-aware money position from the booking_balances view; falls back to a
+  // plain per-booking computation until the view exists (fresh migrations).
+  const bal = balanceRow as BookingBalance | null;
+  const paid =
+    bal?.amount_paid ??
+    ((payments as Payment[] | null)?.reduce((sum, p) => sum + p.amount, 0) ?? 0);
+  const totalDue = bal?.amount_due ?? b.total_amount;
+  const balance = bal?.balance ?? Math.max(0, b.total_amount - paid);
+  const isReturnLeg = bal?.is_return_leg ?? false;
+  const carriedIn = (transfersIn ?? []) as unknown as TransferIn[];
+  const carriedOut = (transfersOut ?? []) as unknown as TransferOut[];
 
   const canCancel =
     b.status !== "cancelled" &&
     (profile.role === "admin" || (b.created_by === profile.id && b.status === "pending"));
-  const canPay = b.status !== "cancelled" && balance > 0;
+  const canPay = b.status !== "cancelled" && !isReturnLeg && balance > 0;
 
   // For round trips, print from the outbound leg (earliest departure).
   const ticketId =
@@ -141,9 +170,62 @@ export default async function BookingDetailPage({
       <Card>
         <CardHeader><CardTitle>Payments</CardTitle></CardHeader>
         <CardContent className="grid gap-2 text-sm">
-          <p>Total: {formatMoney(b.total_amount, b.currency)}</p>
-          <p>Paid: {formatMoney(paid, b.currency)}</p>
-          <p className="font-medium">Balance: {formatMoney(balance, b.currency)}</p>
+          {isReturnLeg ? (
+            <p className="text-muted-foreground">
+              This return leg is billed and paid together with its outbound booking.
+            </p>
+          ) : (
+            <>
+              <p>
+                Total due{b.trip_type === "round_trip" ? " (both legs)" : ""}:{" "}
+                {formatMoney(totalDue, b.currency)}
+              </p>
+              {b.carried_balance > 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  Includes {formatMoney(b.carried_balance, b.currency)} unpaid balance carried over
+                  {carriedIn.length > 0 && (
+                    <>
+                      {" "}from{" "}
+                      {carriedIn.map((t, i) => (
+                        <span key={t.from?.id ?? i}>
+                          {i > 0 && ", "}
+                          {t.from ? (
+                            <Link href={`/bookings/${t.from.id}`} className="font-mono text-primary hover:underline">
+                              {t.from.reference}
+                            </Link>
+                          ) : "a previous booking"}
+                          {" "}({formatMoney(t.amount, b.currency)})
+                        </span>
+                      ))}
+                    </>
+                  )}
+                </p>
+              )}
+              <p>Paid: {formatMoney(paid, b.currency)}</p>
+              <p className="font-medium">
+                Remaining balance:{" "}
+                <span className={balance > 0 ? "text-amber-600 dark:text-amber-500" : "text-green-600 dark:text-green-500"}>
+                  {formatMoney(balance, b.currency)}
+                </span>
+              </p>
+            </>
+          )}
+          {carriedOut.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Unpaid balance carried forward to{" "}
+              {carriedOut.map((t, i) => (
+                <span key={t.to?.id ?? i}>
+                  {i > 0 && ", "}
+                  {t.to ? (
+                    <Link href={`/bookings/${t.to.id}`} className="font-mono text-primary hover:underline">
+                      {t.to.reference}
+                    </Link>
+                  ) : "a newer booking"}
+                  {" "}({formatMoney(t.amount, b.currency)})
+                </span>
+              ))}
+            </p>
+          )}
           <Separator />
           {(payments as Payment[] | null)?.map((p) => (
             <p key={p.id} className="text-muted-foreground">
