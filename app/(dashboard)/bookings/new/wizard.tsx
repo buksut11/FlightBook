@@ -12,6 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const STEPS = ["Flight", "Customer & passengers", "Review"] as const;
@@ -19,6 +22,33 @@ const STEPS = ["Flight", "Customer & passengers", "Review"] as const;
 const emptyPassenger: PassengerInput = {
   full_name: "", id_number: "", passenger_type: "adult",
 };
+
+const discountItems = [
+  { value: "none", label: "No discount" },
+  { value: "percent", label: "Percent off" },
+  { value: "fixed", label: "Fixed amount off" },
+];
+
+const passengerTypeItems = [
+  { value: "adult", label: "Adult" },
+  { value: "child", label: "Child" },
+  { value: "infant", label: "Infant" },
+];
+
+function cabinItems(f: FlightRow) {
+  return [
+    {
+      value: "economy",
+      label: `Economy — ${formatMoney(f.price_economy, f.currency)} (${f.seats_available_economy} left)`,
+    },
+    ...(f.price_business !== null
+      ? [{
+          value: "business",
+          label: `Business — ${formatMoney(f.price_business, f.currency)} (${f.seats_available_business} left)`,
+        }]
+      : []),
+  ];
+}
 
 export function Wizard({ flights }: { flights: FlightRow[] }) {
   const router = useRouter();
@@ -150,8 +180,6 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
     });
   }
 
-  const selectCls = "h-9 rounded-md border border-input bg-transparent px-3 text-sm";
-
   return (
     <div className="mt-4 grid gap-4">
       <ol className="flex gap-2 text-xs">
@@ -276,45 +304,50 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
 
           <div className="grid gap-2">
             <Label>Cabin class{tripType === "round_trip" ? " (outbound)" : ""}</Label>
-            <select className={selectCls} value={cabin}
-              onChange={(e) => setCabin(e.target.value as CabinClass)}>
-              <option value="economy">
-                Economy — {formatMoney(flight.price_economy, flight.currency)} ({flight.seats_available_economy} left)
-              </option>
-              {flight.price_business !== null && (
-                <option value="business">
-                  Business — {formatMoney(flight.price_business, flight.currency)} ({flight.seats_available_business} left)
-                </option>
-              )}
-            </select>
+            <Select items={cabinItems(flight)} value={cabin}
+              onValueChange={(v: string | null) => setCabin((v ?? "economy") as CabinClass)}>
+              <SelectTrigger className="h-9 w-full sm:w-fit">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {cabinItems(flight).map((c) => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {tripType === "round_trip" && returnFlight && (
             <div className="grid gap-2">
               <Label>Return cabin class</Label>
-              <select className={selectCls} value={returnCabin}
-                onChange={(e) => setReturnCabin(e.target.value as CabinClass)}>
-                <option value="economy">
-                  Economy — {formatMoney(returnFlight.price_economy, returnFlight.currency)} ({returnFlight.seats_available_economy} left)
-                </option>
-                {returnFlight.price_business !== null && (
-                  <option value="business">
-                    Business — {formatMoney(returnFlight.price_business, returnFlight.currency)} ({returnFlight.seats_available_business} left)
-                  </option>
-                )}
-              </select>
+              <Select items={cabinItems(returnFlight)} value={returnCabin}
+                onValueChange={(v: string | null) => setReturnCabin((v ?? "economy") as CabinClass)}>
+                <SelectTrigger className="h-9 w-full sm:w-fit">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {cabinItems(returnFlight).map((c) => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 
           <div className="grid gap-2 border-t pt-3 sm:grid-cols-3">
             <div className="grid gap-2">
               <Label>Discount</Label>
-              <select className={selectCls} value={discountType}
-                onChange={(e) => setDiscountType(e.target.value as DiscountType)}>
-                <option value="none">No discount</option>
-                <option value="percent">Percent off</option>
-                <option value="fixed">Fixed amount off</option>
-              </select>
+              <Select items={discountItems} value={discountType}
+                onValueChange={(v: string | null) => setDiscountType((v ?? "none") as DiscountType)}>
+                <SelectTrigger className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {discountItems.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {discountType !== "none" && (
               <>
@@ -353,12 +386,18 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
                   onChange={(e) => setPassenger(i, { full_name: e.target.value })} />
                 <Input placeholder="ID / passport (optional)" value={p.id_number ?? ""}
                   onChange={(e) => setPassenger(i, { id_number: e.target.value })} />
-                <select className={selectCls} value={p.passenger_type}
-                  onChange={(e) => setPassenger(i, { passenger_type: e.target.value as PassengerInput["passenger_type"] })}>
-                  <option value="adult">Adult</option>
-                  <option value="child">Child</option>
-                  <option value="infant">Infant</option>
-                </select>
+                <Select items={passengerTypeItems} value={p.passenger_type}
+                  onValueChange={(v: string | null) =>
+                    setPassenger(i, { passenger_type: (v ?? "adult") as PassengerInput["passenger_type"] })}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {passengerTypeItems.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button variant="ghost" size="sm" disabled={passengers.length === 1}
                   onClick={() => setPassengers((prev) => prev.filter((_, idx) => idx !== i))}>
                   Remove

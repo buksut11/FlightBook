@@ -3,7 +3,17 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import type { Profile } from "@/lib/types/database";
+
+const statusItems = [
+  { value: "", label: "All statuses" },
+  { value: "pending", label: "Pending" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 export function BookingFilters({ agents }: { agents: Profile[] }) {
   const router = useRouter();
@@ -26,7 +36,10 @@ export function BookingFilters({ agents }: { agents: Profile[] }) {
     router.replace(`?${params.toString()}`);
   }
 
-  const selectCls = "h-9 rounded-md border border-input bg-transparent px-3 text-sm";
+  const agentItems = [
+    { value: "", label: "All agents" },
+    ...agents.map((a) => ({ value: a.id, label: a.full_name })),
+  ];
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -36,26 +49,30 @@ export function BookingFilters({ agents }: { agents: Profile[] }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
-      <select
-        className={selectCls}
-        defaultValue={searchParams.get("status") ?? ""}
-        onChange={(e) => setParam("status", e.target.value)}
-      >
-        <option value="">All statuses</option>
-        <option value="pending">Pending</option>
-        <option value="confirmed">Confirmed</option>
-        <option value="cancelled">Cancelled</option>
-      </select>
-      <select
-        className={selectCls}
-        defaultValue={searchParams.get("agent") ?? ""}
-        onChange={(e) => setParam("agent", e.target.value)}
-      >
-        <option value="">All agents</option>
-        {agents.map((a) => (
-          <option key={a.id} value={a.id}>{a.full_name}</option>
-        ))}
-      </select>
+      <Select items={statusItems}
+        value={searchParams.get("status") ?? ""}
+        onValueChange={(v: string | null) => setParam("status", v ?? "")}>
+        <SelectTrigger className="h-9">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {statusItems.map((s) => (
+            <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select items={agentItems}
+        value={searchParams.get("agent") ?? ""}
+        onValueChange={(v: string | null) => setParam("agent", v ?? "")}>
+        <SelectTrigger className="h-9">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {agentItems.map((a) => (
+            <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

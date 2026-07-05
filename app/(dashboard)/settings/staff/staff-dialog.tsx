@@ -5,9 +5,16 @@ import { createStaff } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+
+const roleItems = [
+  { value: "agent", label: "Agent" },
+  { value: "admin", label: "Admin" },
+];
 
 export function StaffDialog() {
-  const selectCls = "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm";
   return (
     <EntityDialog title="Add staff member" action={createStaff} trigger={<Button>Add staff</Button>}>
       <div className="grid gap-2">
@@ -24,10 +31,16 @@ export function StaffDialog() {
       </div>
       <div className="grid gap-2">
         <Label htmlFor="role">Role</Label>
-        <select id="role" name="role" className={selectCls} defaultValue="agent" required>
-          <option value="agent">Agent</option>
-          <option value="admin">Admin</option>
-        </select>
+        <Select name="role" defaultValue="agent" required items={roleItems}>
+          <SelectTrigger id="role" className="h-9 w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {roleItems.map((r) => (
+              <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="password">Temporary password</Label>
