@@ -4,7 +4,7 @@ import type { Aircraft, Airport } from "@/lib/types/database";
 import { FLIGHT_SELECT, type FlightRow } from "./flight-query";
 import { FlightDialog } from "./flight-dialog";
 import { LoadBar } from "./load-bar";
-import { cancelFlight } from "./actions";
+import { cancelFlight, deleteFlight } from "./actions";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +94,12 @@ export default async function FlightsPage() {
                         confirmText="Flights with active bookings cannot be cancelled. This cannot be undone."
                       />
                     )}
+                    <ConfirmButton
+                      action={deleteFlight.bind(null, f.id)}
+                      label="Delete"
+                      confirmTitle={`Delete flight ${f.flight_number}?`}
+                      confirmText="The flight is removed permanently. Flights with bookings (even old ones) cannot be deleted — cancel those instead. This cannot be undone."
+                    />
                   </TableCell>
                 )}
               </TableRow>
