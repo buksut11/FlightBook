@@ -105,3 +105,36 @@ export async function cancelFlight(id: string): Promise<ActionResult> {
   revalidatePath("/");
   return { ok: true };
 }
+
+export async function deleteFlight(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  // Any booking — even a cancelled one — keeps the flight as history.
+  const { count } = await supabase
+    .from("bookings")
+    .select("id", { count: "exact", head: true })
+    .eq("flight_id", id);
+  if ((count ?? 0) > 0) {
+    return {
+      ok: false,
+      message: `This flight has ${count} booking(s) in its history, so it cannot be deleted. Cancel it instead to keep the records.`,
+    };
+  }
+
+  // RLS silently deletes nothing when the policy is missing, so select the
+  // deleted row back to tell "blocked" apart from "deleted".
+  const { data, error } = await supabase.from("flights").delete().eq("id", id).select("id");
+  if (error) return { ok: false, message: "Could not delete the flight." };
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      message:
+        "The database refused the delete. Run supabase/migrations/0009_flights_delete.sql once in the Supabase SQL Editor, then try again.",
+    };
+  }
+
+  revalidatePath("/flights");
+  revalidatePath("/");
+  return { ok: true };
+}
