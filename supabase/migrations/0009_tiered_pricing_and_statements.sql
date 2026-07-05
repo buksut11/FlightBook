@@ -11,18 +11,21 @@
 -- Schema changes
 -- ---------------------------------------------------------------------------
 
+-- The whole migration is idempotent: a partially applied run (e.g. an
+-- interrupted SQL Editor execution) can simply be re-run from the top.
+
 alter table public.flights
-  add column price_economy_child   numeric(10,2) check (price_economy_child >= 0),
-  add column price_economy_infant  numeric(10,2) check (price_economy_infant >= 0),
-  add column price_business_child  numeric(10,2) check (price_business_child >= 0),
-  add column price_business_infant numeric(10,2) check (price_business_infant >= 0);
+  add column if not exists price_economy_child   numeric(10,2) check (price_economy_child >= 0),
+  add column if not exists price_economy_infant  numeric(10,2) check (price_economy_infant >= 0),
+  add column if not exists price_business_child  numeric(10,2) check (price_business_child >= 0),
+  add column if not exists price_business_infant numeric(10,2) check (price_business_infant >= 0);
 
 alter table public.bookings
-  add column carried_balance numeric(10,2) not null default 0 check (carried_balance >= 0);
+  add column if not exists carried_balance numeric(10,2) not null default 0 check (carried_balance >= 0);
 
 -- One row per unpaid balance rolled from an old booking into a new one.
 -- Voided rows (cancelled target booking) return the debt to the source booking.
-create table public.balance_transfers (
+create table if not exists public.balance_transfers (
   id uuid primary key default gen_random_uuid(),
   from_booking_id uuid not null references public.bookings(id),
   to_booking_id uuid not null references public.bookings(id),
@@ -33,10 +36,11 @@ create table public.balance_transfers (
   voided_by uuid references public.profiles(id),
   constraint different_bookings check (from_booking_id <> to_booking_id)
 );
-create index balance_transfers_from_idx on public.balance_transfers (from_booking_id);
-create index balance_transfers_to_idx on public.balance_transfers (to_booking_id);
+create index if not exists balance_transfers_from_idx on public.balance_transfers (from_booking_id);
+create index if not exists balance_transfers_to_idx on public.balance_transfers (to_booking_id);
 
 alter table public.balance_transfers enable row level security;
+drop policy if exists "staff read transfers" on public.balance_transfers;
 create policy "staff read transfers" on public.balance_transfers
   for select using (public.is_active_staff());
 -- writes happen only inside the security definer RPCs below
