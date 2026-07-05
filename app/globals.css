@@ -126,6 +126,12 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Native <select> popups: Chromium follows color-scheme, but Firefox
+     paints each option with its own background — transparent falls back
+     to white, so give options explicit theme colors. */
+  select option {
+    @apply bg-card text-card-foreground;
+  }
   html {
     @apply font-sans;
   }
