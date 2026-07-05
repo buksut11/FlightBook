@@ -79,6 +79,7 @@ export async function saveFlight(
   }
 
   revalidatePath("/flights");
+  revalidatePath("/");
   return { ok: true };
 }
 
@@ -101,5 +102,6 @@ export async function cancelFlight(id: string): Promise<ActionResult> {
   const { error } = await supabase.from("flights").update({ status: "cancelled" }).eq("id", id);
   if (error) return { ok: false, message: "Could not cancel the flight." };
   revalidatePath("/flights");
+  revalidatePath("/");
   return { ok: true };
 }
