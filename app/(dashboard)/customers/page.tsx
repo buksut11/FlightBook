@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { getProfile } from "@/lib/auth/get-profile";
 import { createClient } from "@/lib/supabase/server";
-import type { Customer } from "@/lib/types/database";
+import type { Customer, CustomerBalance } from "@/lib/types/database";
 import { SearchInput } from "./search-input";
+import { formatMoney } from "@/lib/format";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -24,6 +25,17 @@ export default async function CustomersPage({
   if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
   const { data: customers } = await query;
 
+  const balances = new Map<string, CustomerBalance>();
+  if (customers && customers.length > 0) {
+    const { data: balRows } = await supabase
+      .from("customer_balances")
+      .select("*")
+      .in("customer_id", customers.map((c) => c.id));
+    for (const row of (balRows ?? []) as CustomerBalance[]) {
+      balances.set(row.customer_id, row);
+    }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold">Customers</h1>
@@ -36,6 +48,7 @@ export default async function CustomersPage({
             <TableHead>Name</TableHead>
             <TableHead>Phone</TableHead>
             <TableHead>Email</TableHead>
+            <TableHead>Outstanding</TableHead>
             <TableHead>Added</TableHead>
           </TableRow>
         </TableHeader>
@@ -49,6 +62,19 @@ export default async function CustomersPage({
               </TableCell>
               <TableCell>{c.phone}</TableCell>
               <TableCell>{c.email ?? "—"}</TableCell>
+              <TableCell>
+                {(() => {
+                  const bal = balances.get(c.id);
+                  if (!bal || bal.outstanding <= 0) {
+                    return <span className="text-muted-foreground">—</span>;
+                  }
+                  return (
+                    <span className="font-medium text-amber-600 dark:text-amber-500">
+                      {formatMoney(bal.outstanding, bal.currency ?? "USD")}
+                    </span>
+                  );
+                })()}
+              </TableCell>
               <TableCell className="text-muted-foreground">
                 {new Date(c.created_at).toLocaleDateString()}
               </TableCell>
@@ -56,7 +82,7 @@ export default async function CustomersPage({
           ))}
           {(customers ?? []).length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground">
+              <TableCell colSpan={5} className="text-center text-muted-foreground">
                 No customers found.
               </TableCell>
             </TableRow>

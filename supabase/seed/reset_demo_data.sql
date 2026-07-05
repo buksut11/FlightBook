@@ -8,6 +8,7 @@
 begin;
 
 delete from public.payments;
+delete from public.balance_transfers;
 delete from public.booking_events;
 delete from public.passengers;
 delete from public.bookings;

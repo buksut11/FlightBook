@@ -18,6 +18,13 @@ export const aircraftSchema = z.object({
 const uuidField = (message: string) =>
   z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, message);
 
+// Optional fare fields arrive as "" from empty form inputs; store as null.
+const optionalPrice = () =>
+  z
+    .union([z.literal(""), z.coerce.number().min(0)])
+    .optional()
+    .transform((v) => (v === "" || v === undefined ? null : v));
+
 export const flightSchema = z
   .object({
     flight_number: z.string().trim().min(2).toUpperCase(),
@@ -27,9 +34,11 @@ export const flightSchema = z
     departure_at: z.string().min(1, "Departure time required"),
     arrival_at: z.string().min(1, "Arrival time required"),
     price_economy: z.coerce.number().min(0),
-    price_business: z
-      .union([z.literal(""), z.coerce.number().min(0)])
-      .transform((v) => (v === "" ? null : v)),
+    price_business: optionalPrice(),
+    price_economy_child: optionalPrice(),
+    price_economy_infant: optionalPrice(),
+    price_business_child: optionalPrice(),
+    price_business_infant: optionalPrice(),
     seats_total_economy: z.coerce.number().int().min(0),
     seats_total_business: z.coerce.number().int().min(0),
     baggage_kg_economy: z.coerce.number().int().min(0),

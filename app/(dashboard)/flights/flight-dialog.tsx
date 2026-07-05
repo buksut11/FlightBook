@@ -212,14 +212,42 @@ export function FlightDialog({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="price_economy">Economy price</Label>
+          <Label htmlFor="price_economy">Economy price (adult)</Label>
           <Input id="price_economy" name="price_economy" type="number" step="0.01" min={0}
             defaultValue={flight?.price_economy} required />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="price_business">Business price (blank if none)</Label>
+          <Label htmlFor="price_business">Business price (adult, blank if none)</Label>
           <Input id="price_business" name="price_business" type="number" step="0.01" min={0}
             defaultValue={flight?.price_business ?? ""} />
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Child and infant fares are optional — leave blank to charge the adult fare.
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="price_economy_child">Economy price (child)</Label>
+          <Input id="price_economy_child" name="price_economy_child" type="number" step="0.01" min={0}
+            defaultValue={flight?.price_economy_child ?? ""} />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="price_business_child">Business price (child)</Label>
+          <Input id="price_business_child" name="price_business_child" type="number" step="0.01" min={0}
+            defaultValue={flight?.price_business_child ?? ""} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-2">
+          <Label htmlFor="price_economy_infant">Economy price (infant)</Label>
+          <Input id="price_economy_infant" name="price_economy_infant" type="number" step="0.01" min={0}
+            defaultValue={flight?.price_economy_infant ?? ""} />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="price_business_infant">Business price (infant)</Label>
+          <Input id="price_business_infant" name="price_business_infant" type="number" step="0.01" min={0}
+            defaultValue={flight?.price_business_infant ?? ""} />
         </div>
       </div>
 

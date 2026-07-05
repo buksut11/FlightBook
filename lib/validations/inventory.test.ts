@@ -69,4 +69,29 @@ describe("flightSchema", () => {
       flightSchema.safeParse({ ...base, price_business: "", seats_total_business: "4" }).success
     ).toBe(false);
   });
+  it("treats absent or blank tiered prices as null", () => {
+    const r = flightSchema.parse({ ...base, price_economy_child: "" });
+    expect(r.price_economy_child).toBeNull();
+    expect(r.price_economy_infant).toBeNull();
+    expect(r.price_business_child).toBeNull();
+    expect(r.price_business_infant).toBeNull();
+  });
+  it("coerces tiered prices from form strings", () => {
+    const r = flightSchema.parse({
+      ...base,
+      price_economy_child: "90",
+      price_economy_infant: "20",
+      price_business_child: "150",
+      price_business_infant: "30",
+    });
+    expect(r.price_economy_child).toBe(90);
+    expect(r.price_economy_infant).toBe(20);
+    expect(r.price_business_child).toBe(150);
+    expect(r.price_business_infant).toBe(30);
+  });
+  it("rejects negative tiered prices", () => {
+    expect(
+      flightSchema.safeParse({ ...base, price_economy_child: "-5" }).success
+    ).toBe(false);
+  });
 });
