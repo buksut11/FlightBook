@@ -11,6 +11,14 @@ export function Sidebar({ role }: { role: Role }) {
   const pathname = usePathname();
   const links = NAV_LINKS.filter((l) => l.roles.includes(role));
 
+  // Highlight only the most specific matching link, so e.g. /bookings/new
+  // lights up "New Booking" without also lighting up "Bookings".
+  const matches = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/");
+  const activeHref = links
+    .filter((l) => matches(l.href))
+    .reduce<string | undefined>((best, l) => (l.href.length > (best?.length ?? 0) ? l.href : best), undefined);
+
   return (
     <>
       {/* Desktop sidebar */}
@@ -21,8 +29,7 @@ export function Sidebar({ role }: { role: Role }) {
         </div>
         <nav className="grid gap-1 px-2">
           {links.map(({ href, label, icon: Icon }) => {
-            const active =
-              href === "/" ? pathname === "/" : pathname.startsWith(href);
+            const active = href === activeHref;
             return (
               <Link
                 key={href}
@@ -45,8 +52,7 @@ export function Sidebar({ role }: { role: Role }) {
       {/* Mobile bottom bar (first 5 links) */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t bg-card p-1 md:hidden">
         {links.slice(0, 5).map(({ href, label, icon: Icon }) => {
-          const active =
-            href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = href === activeHref;
           return (
             <Link
               key={href}
