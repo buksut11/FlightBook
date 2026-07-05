@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { createClient } from "@/lib/supabase/server";
 import { DateRange } from "./date-range";
 import { StatCard } from "@/components/stat-card";
+import { LiveRefresh } from "@/components/live-refresh";
 import { formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,7 @@ export default async function ReportsPage({
 
   return (
     <div className="grid gap-6">
+      <LiveRefresh />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Reports</h1>
         <Button

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getProfile } from "@/lib/auth/get-profile";
 import { createClient } from "@/lib/supabase/server";
 import { StatCard } from "@/components/stat-card";
+import { LiveRefresh } from "@/components/live-refresh";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="grid gap-6">
+      <LiveRefresh />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Welcome, {profile.full_name}</h1>
         <Button render={<Link href="/bookings/new">New booking</Link>} />

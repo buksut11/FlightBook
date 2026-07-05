@@ -48,6 +48,8 @@ export async function createBookingAction(
   const result = data as CreateBookingResult;
   revalidatePath("/flights");
   revalidatePath("/bookings");
+  revalidatePath("/");
+  revalidatePath("/reports");
   return {
     ok: true,
     reference: result.reference,

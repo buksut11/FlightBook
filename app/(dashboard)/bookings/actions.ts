@@ -26,6 +26,8 @@ export async function recordPaymentAction(
 
   revalidatePath(`/bookings/${bookingId}`);
   revalidatePath("/bookings");
+  revalidatePath("/");
+  revalidatePath("/reports");
   return { ok: true };
 }
 
@@ -44,5 +46,7 @@ export async function cancelBookingAction(
   revalidatePath(`/bookings/${bookingId}`);
   revalidatePath("/bookings");
   revalidatePath("/flights");
+  revalidatePath("/");
+  revalidatePath("/reports");
   return { ok: true };
 }
