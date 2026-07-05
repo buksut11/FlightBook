@@ -17,9 +17,9 @@ export function LoginForm() {
   return (
     <Card
       data-hero="card"
-      className="w-full max-w-sm border-white/50 bg-white/75 shadow-2xl shadow-blue-950/20 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60"
+      className="w-full max-w-md border-white/50 bg-white/75 shadow-2xl shadow-blue-950/20 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/60"
     >
-      <CardHeader>
+      <CardHeader className="text-center">
         <CardTitle data-hero="item" className="text-2xl">Staff sign in</CardTitle>
         <CardDescription data-hero="item">Flight booking system</CardDescription>
       </CardHeader>
