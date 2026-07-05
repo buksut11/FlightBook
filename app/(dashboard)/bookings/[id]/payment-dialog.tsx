@@ -5,9 +5,19 @@ import { recordPaymentAction } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+
+const methodItems = [
+  { value: "evc_plus", label: "EVC Plus" },
+  { value: "zaad", label: "Zaad" },
+  { value: "sahal", label: "Sahal" },
+  { value: "cash", label: "Cash" },
+  { value: "other", label: "Other" },
+];
 
 export function PaymentDialog({ bookingId, balance }: { bookingId: string; balance: number }) {
-  const selectCls = "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm";
   return (
     <EntityDialog
       title="Record a payment"
@@ -20,13 +30,16 @@ export function PaymentDialog({ bookingId, balance }: { bookingId: string; balan
       </div>
       <div className="grid gap-2">
         <Label htmlFor="method">Method</Label>
-        <select id="method" name="method" className={selectCls} defaultValue="evc_plus" required>
-          <option value="evc_plus">EVC Plus</option>
-          <option value="zaad">Zaad</option>
-          <option value="sahal">Sahal</option>
-          <option value="cash">Cash</option>
-          <option value="other">Other</option>
-        </select>
+        <Select name="method" defaultValue="evc_plus" required items={methodItems}>
+          <SelectTrigger id="method" className="h-9 w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {methodItems.map((m) => (
+              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="grid gap-2">
         <Label htmlFor="transaction_ref">Transaction reference (optional)</Label>

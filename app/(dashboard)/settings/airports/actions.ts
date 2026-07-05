@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { airportSchema } from "@/lib/validations/inventory";
 import type { ActionResult } from "@/lib/types/action";
+import type { Airport } from "@/lib/types/database";
 
 export async function saveAirport(
   id: string | null,
@@ -27,6 +28,32 @@ export async function saveAirport(
   }
   revalidatePath("/settings/airports");
   return { ok: true };
+}
+
+// Used by the flight dialog to add a city without leaving the form; returns
+// the created row so the dialog can select it immediately.
+export async function createAirport(
+  formData: FormData
+): Promise<ActionResult & { airport?: Airport }> {
+  await requireAdmin();
+  const parsed = airportSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("airports")
+    .insert(parsed.data)
+    .select()
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      message: error?.code === "23505" ? "That airport code already exists." : "Could not save the airport.",
+    };
+  }
+  revalidatePath("/settings/airports");
+  revalidatePath("/flights");
+  return { ok: true, airport: data as Airport };
 }
 
 export async function deleteAirport(id: string): Promise<ActionResult> {
