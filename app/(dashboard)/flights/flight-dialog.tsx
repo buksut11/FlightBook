@@ -1,11 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { EntityDialog } from "@/components/entity-dialog";
 import { saveFlight } from "./actions";
+import { createAirport } from "../settings/airports/actions";
 import type { Aircraft, Airport, Flight } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+const ADD_NEW_CITY = "__add_new_city__";
+const emptyCity = { code: "", name: "", city: "", country: "" };
 
 function toLocalInput(iso: string): string {
   const d = new Date(iso);
@@ -22,6 +27,52 @@ export function FlightDialog({
   airports: Airport[];
   fleet: Aircraft[];
 }) {
+  const [airportList, setAirportList] = useState(airports);
+  const [origin, setOrigin] = useState(flight?.origin_airport_id ?? "");
+  const [destination, setDestination] = useState(flight?.destination_airport_id ?? "");
+  const [addingFor, setAddingFor] = useState<"origin" | "destination" | null>(null);
+  const [newCity, setNewCity] = useState(emptyCity);
+  const [cityError, setCityError] = useState<string | null>(null);
+  const [savingCity, setSavingCity] = useState(false);
+
+  function onAirportChange(field: "origin" | "destination") {
+    return (e: React.ChangeEvent<HTMLSelectElement>) => {
+      if (e.target.value === ADD_NEW_CITY) {
+        setAddingFor(field);
+        return; // controlled select keeps its previous value
+      }
+      (field === "origin" ? setOrigin : setDestination)(e.target.value);
+    };
+  }
+
+  function closeAddCity() {
+    setAddingFor(null);
+    setNewCity(emptyCity);
+    setCityError(null);
+  }
+
+  async function addCity() {
+    setSavingCity(true);
+    setCityError(null);
+    const fd = new FormData();
+    fd.set("code", newCity.code);
+    fd.set("name", newCity.name);
+    fd.set("city", newCity.city);
+    fd.set("country", newCity.country);
+    const result = await createAirport(fd);
+    if (result.ok && result.airport) {
+      const created = result.airport;
+      setAirportList((list) =>
+        [...list, created].sort((a, b) => a.code.localeCompare(b.code))
+      );
+      (addingFor === "origin" ? setOrigin : setDestination)(created.id);
+      closeAddCity();
+    } else {
+      setCityError(result.message ?? "Something went wrong.");
+    }
+    setSavingCity(false);
+  }
+
   function onAircraftChange(e: React.ChangeEvent<HTMLSelectElement>) {
     if (flight) return; // editing: never auto-overwrite capacity
     const opt = e.target.selectedOptions[0];
@@ -62,24 +113,56 @@ export function FlightDialog({
         <div className="grid gap-2">
           <Label htmlFor="origin_airport_id">From</Label>
           <select id="origin_airport_id" name="origin_airport_id" className={selectCls}
-            defaultValue={flight?.origin_airport_id ?? ""} required>
+            value={origin} onChange={onAirportChange("origin")} required>
             <option value="" disabled>Choose…</option>
-            {airports.map((a) => (
+            {airportList.map((a) => (
               <option key={a.id} value={a.id}>{a.code} — {a.city}</option>
             ))}
+            <option value={ADD_NEW_CITY}>+ Add new city…</option>
           </select>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="destination_airport_id">To</Label>
           <select id="destination_airport_id" name="destination_airport_id" className={selectCls}
-            defaultValue={flight?.destination_airport_id ?? ""} required>
+            value={destination} onChange={onAirportChange("destination")} required>
             <option value="" disabled>Choose…</option>
-            {airports.map((a) => (
+            {airportList.map((a) => (
               <option key={a.id} value={a.id}>{a.code} — {a.city}</option>
             ))}
+            <option value={ADD_NEW_CITY}>+ Add new city…</option>
           </select>
         </div>
       </div>
+
+      {addingFor && (
+        <div className="grid gap-3 rounded-md border p-3">
+          <p className="text-sm font-medium">
+            New city ({addingFor === "origin" ? "From" : "To"})
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {/* No `name` attributes: these must not be submitted with the flight form */}
+            <Input placeholder="Code (3 letters)" maxLength={3} value={newCity.code}
+              onChange={(e) => setNewCity({ ...newCity, code: e.target.value.toUpperCase() })} />
+            <Input placeholder="City" value={newCity.city}
+              onChange={(e) => setNewCity({ ...newCity, city: e.target.value })} />
+            <Input placeholder="Airport name" value={newCity.name}
+              onChange={(e) => setNewCity({ ...newCity, name: e.target.value })} />
+            <Input placeholder="Country" value={newCity.country}
+              onChange={(e) => setNewCity({ ...newCity, country: e.target.value })} />
+          </div>
+          {cityError && (
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">{cityError}</p>
+          )}
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={addCity} disabled={savingCity}>
+              {savingCity ? "Adding…" : "Add city"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={closeAddCity}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="aircraft_id">Aircraft</Label>

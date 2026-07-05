@@ -49,6 +49,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: oklch(0.984 0.003 247.858); /* #f8fafc */
   --foreground: oklch(0.208 0.042 265.755); /* #0f172a */
   --card: oklch(1 0 0);
@@ -84,6 +85,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.208 0.042 265.755); /* #0f172a */
   --foreground: oklch(0.984 0.003 247.858); /* #f8fafc */
   --card: oklch(0.279 0.041 260.031); /* #1e293b */
