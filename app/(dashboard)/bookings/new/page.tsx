@@ -1,12 +1,13 @@
 import { getProfile } from "@/lib/auth/get-profile";
 import { createClient } from "@/lib/supabase/server";
 import { Wizard } from "./wizard";
+import { RpcErrorCard } from "@/components/rpc-error-card";
 import { FLIGHT_SELECT, type FlightRow } from "@/app/(dashboard)/flights/flight-query";
 
 export default async function NewBookingPage() {
   await getProfile();
   const supabase = await createClient();
-  const { data: flights } = await supabase
+  const { data: flights, error } = await supabase
     .from("flights")
     .select(FLIGHT_SELECT)
     .eq("status", "scheduled")
@@ -20,7 +21,13 @@ export default async function NewBookingPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <h1 className="text-2xl font-semibold">New booking</h1>
-      <Wizard flights={bookable} />
+      {error ? (
+        <div className="mt-4">
+          <RpcErrorCard error={error} what="the flight list" />
+        </div>
+      ) : (
+        <Wizard flights={bookable} />
+      )}
     </div>
   );
 }

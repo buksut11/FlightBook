@@ -32,3 +32,40 @@ export function mapRpcError(message: string): string {
 
   return "Something went wrong. Please try again.";
 }
+
+/**
+ * Explains why a database read failed, instead of letting a page render
+ * misleading zeros or an empty list. The most common cause on this project is
+ * an out-of-date database — migrations are applied by hand in the Supabase
+ * SQL Editor — which surfaces as a missing function (PGRST202), a missing
+ * table/view (42P01), a missing column (42703), or a missing relationship
+ * (PGRST200). `what` names the function or data being loaded.
+ */
+export function rpcErrorText(
+  error: { code?: string; message?: string },
+  what: string
+): string {
+  const m = error.message ?? "";
+  if (error.code === "PGRST202" || /could not find the function/i.test(m)) {
+    return `The database is missing the ${what}() function. ` +
+      `Run supabase/migrations/0010_reporting_fixes.sql in the Supabase SQL Editor, then reload.`;
+  }
+  // Check for a missing column before a missing relation: 42703 messages
+  // ("column x of relation y does not exist") also mention a relation.
+  if (error.code === "42703" || /column .* does not exist/i.test(m)) {
+    return `The database schema is out of date for ${what} (a column is missing). ` +
+      `Run supabase/migrations/0009_tiered_pricing_and_statements.sql (and any later files) ` +
+      `in the Supabase SQL Editor, then reload.`;
+  }
+  if (error.code === "42P01" || /relation .* does not exist/i.test(m)) {
+    return `The database is missing a table or view needed by ${what}. ` +
+      `Apply the files in supabase/migrations in numeric order in the Supabase SQL Editor, then reload.`;
+  }
+  if (error.code === "PGRST200" || /could not find a relationship/i.test(m)) {
+    return `The database schema is out of date for ${what}. ` +
+      `Apply the files in supabase/migrations in numeric order in the Supabase SQL Editor, then reload.`;
+  }
+  if (m.includes("NOT_ADMIN")) return "Only admins can view reports.";
+  if (m.includes("NOT_STAFF")) return "Your account is not an active staff account.";
+  return m || "Something went wrong loading this data.";
+}

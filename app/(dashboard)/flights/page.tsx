@@ -6,6 +6,7 @@ import { FlightDialog } from "./flight-dialog";
 import { LoadBar } from "./load-bar";
 import { cancelFlight } from "./actions";
 import { ConfirmButton } from "@/components/confirm-button";
+import { RpcErrorCard } from "@/components/rpc-error-card";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,7 +18,7 @@ export default async function FlightsPage() {
   const isAdmin = profile.role === "admin";
   const supabase = await createClient();
 
-  const [{ data: flights }, { data: airports }, { data: fleet }] = await Promise.all([
+  const [{ data: flights, error: flightsError }, { data: airports }, { data: fleet }] = await Promise.all([
     supabase.from("flights").select(FLIGHT_SELECT).order("departure_at"),
     supabase.from("airports").select("*").order("code"),
     supabase.from("aircraft").select("*").order("model"),
@@ -31,6 +32,11 @@ export default async function FlightsPage() {
           <FlightDialog airports={(airports ?? []) as Airport[]} fleet={(fleet ?? []) as Aircraft[]} />
         )}
       </div>
+      {flightsError && (
+        <div className="mt-4">
+          <RpcErrorCard error={flightsError} what="the flight list" />
+        </div>
+      )}
       <div className="mt-4 overflow-x-auto">
         <Table>
           <TableHeader>

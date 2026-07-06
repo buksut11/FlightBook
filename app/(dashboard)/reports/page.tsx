@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth/require-admin";
 import { createClient } from "@/lib/supabase/server";
 import { DateRange } from "./date-range";
 import { StatCard } from "@/components/stat-card";
+import { RpcErrorCard } from "@/components/rpc-error-card";
 import { LiveRefresh } from "@/components/live-refresh";
 import { formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export default async function ReportsPage({
   const to = sp.to ?? def.to;
 
   const supabase = await createClient();
-  const { data } = await supabase.rpc("report_summary", { p_from: from, p_to: to });
+  const { data, error } = await supabase.rpc("report_summary", { p_from: from, p_to: to });
   const r = (data ?? {}) as {
     total_revenue: number; bookings_count: number; discounts_total: number;
     by_agent: { agent: string; bookings: number; revenue: number }[];
@@ -50,6 +51,9 @@ export default async function ReportsPage({
 
       <DateRange from={from} to={to} />
 
+      {error && <RpcErrorCard error={error} what="report_summary" />}
+
+      {!error && <>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Revenue" value={formatMoney(r.total_revenue ?? 0, "USD")} />
         <StatCard label="Bookings" value={String(r.bookings_count ?? 0)} />
@@ -109,6 +113,7 @@ export default async function ReportsPage({
           </Table>
         </CardContent>
       </Card>
+      </>}
     </div>
   );
 }
