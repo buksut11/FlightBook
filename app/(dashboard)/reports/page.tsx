@@ -51,7 +51,7 @@ export default async function ReportsPage({
 
       <DateRange from={from} to={to} />
 
-      {error && <RpcErrorCard error={error} functionName="report_summary" />}
+      {error && <RpcErrorCard error={error} what="report_summary" />}
 
       {!error && <>
       <div className="grid gap-4 sm:grid-cols-3">

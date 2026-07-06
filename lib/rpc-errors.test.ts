@@ -59,6 +59,32 @@ describe("rpcErrorText", () => {
     );
     expect(text).toContain("dashboard_summary()");
   });
+  it("points at the migrations when a table or view is missing (42P01)", () => {
+    const text = rpcErrorText(
+      { code: "42P01", message: 'relation "public.customer_balances" does not exist' },
+      "customer balances"
+    );
+    expect(text).toContain("customer balances");
+    expect(text).toContain("supabase/migrations");
+  });
+  it("points at migration 0009 when a column is missing (42703)", () => {
+    const text = rpcErrorText(
+      { code: "42703", message: 'column "price_economy_child" of relation "flights" does not exist' },
+      "flights"
+    );
+    expect(text).toContain("0009_tiered_pricing_and_statements.sql");
+  });
+  it("points at the migrations when an embed relationship is missing (PGRST200)", () => {
+    const text = rpcErrorText(
+      {
+        code: "PGRST200",
+        message: "Could not find a relationship between 'flights' and 'airports' in the schema cache",
+      },
+      "the flight list"
+    );
+    expect(text).toContain("the flight list");
+    expect(text).toContain("supabase/migrations");
+  });
   it("maps NOT_ADMIN", () => {
     expect(rpcErrorText({ message: "NOT_ADMIN" }, "report_summary")).toBe(
       "Only admins can view reports."

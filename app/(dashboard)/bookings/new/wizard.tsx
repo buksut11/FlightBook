@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createBookingAction, checkDuplicatePending } from "./actions";
@@ -8,6 +9,7 @@ import type { FlightRow } from "@/app/(dashboard)/flights/flight-query";
 import type { CabinClass, Customer, PassengerType, TripType, DiscountType } from "@/lib/types/database";
 import type { PassengerInput } from "@/lib/validations/booking";
 import { fareFor, legSubtotal } from "@/lib/pricing";
+import { rpcErrorText } from "@/lib/rpc-errors";
 import { formatDateTime, formatMoney } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -140,12 +142,19 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
       if (passengers.length === 1 && passengers[0].full_name === "") {
         setPassengers([{ ...emptyPassenger, full_name: c.full_name }]);
       }
-      const { data: bal } = await supabase
+      const { data: bal, error: balError } = await supabase
         .from("customer_balances")
         .select("outstanding")
         .eq("customer_id", c.id)
         .maybeSingle();
-      setPrevBalance(Math.max(0, Number(bal?.outstanding ?? 0)));
+      if (balError) {
+        // Don't silently under-charge: the previous balance couldn't be read.
+        setError(
+          `Couldn't check this customer's previous unpaid balance — ${rpcErrorText(balError, "customer balances")}`
+        );
+      } else {
+        setPrevBalance(Math.max(0, Number(bal?.outstanding ?? 0)));
+      }
     }
   }
 
@@ -260,8 +269,20 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
               </CardContent>
             </Card>
           ))}
-          {filteredFlights.length === 0 && (
-            <p className="text-sm text-muted-foreground">No bookable flights match.</p>
+          {flights.length === 0 && (
+            <div className="rounded-md border p-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">No upcoming flights to book.</p>
+              <p className="mt-1">
+                There are no scheduled flights in the future with seats available.
+                An admin can add flights on the{" "}
+                <Link href="/flights" className="text-primary underline">Flights page</Link>
+                {" "}— a flight must have a future departure time and a status of
+                &quot;scheduled&quot; to appear here.
+              </p>
+            </div>
+          )}
+          {flights.length > 0 && filteredFlights.length === 0 && (
+            <p className="text-sm text-muted-foreground">No flights match your search.</p>
           )}
 
           {tripType === "round_trip" && flight && (

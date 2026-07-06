@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { flightSchema } from "@/lib/validations/inventory";
+import { rpcErrorText } from "@/lib/rpc-errors";
 import type { ActionResult } from "@/lib/types/action";
 
 export async function saveFlight(
@@ -60,7 +61,9 @@ export async function saveFlight(
         currency: d.currency,
       })
       .eq("id", id);
-    if (error) return { ok: false, message: "Could not save the flight." };
+    if (error) {
+      return { ok: false, message: `Could not save the flight. ${rpcErrorText(error, "flights")}` };
+    }
   } else {
     const { error } = await supabase.from("flights").insert({
       flight_number: d.flight_number,
@@ -83,7 +86,9 @@ export async function saveFlight(
       baggage_kg_business: d.baggage_kg_business,
       currency: d.currency,
     });
-    if (error) return { ok: false, message: "Could not create the flight." };
+    if (error) {
+      return { ok: false, message: `Could not create the flight. ${rpcErrorText(error, "flights")}` };
+    }
   }
 
   revalidatePath("/flights");

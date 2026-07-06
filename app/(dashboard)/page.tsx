@@ -33,7 +33,7 @@ export default async function DashboardPage() {
       </div>
 
       {error ? (
-        <RpcErrorCard error={error} functionName="dashboard_summary" />
+        <RpcErrorCard error={error} what="dashboard_summary" />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
