@@ -32,3 +32,24 @@ export function mapRpcError(message: string): string {
 
   return "Something went wrong. Please try again.";
 }
+
+/**
+ * Explains why a reporting RPC (dashboard_summary / report_summary) failed,
+ * instead of letting a page render misleading zeros. The most common cause on
+ * this project is a database function that was never created — migrations are
+ * applied by hand in the Supabase SQL Editor — which surfaces as PostgREST
+ * error PGRST202.
+ */
+export function rpcErrorText(
+  error: { code?: string; message?: string },
+  functionName: string
+): string {
+  const m = error.message ?? "";
+  if (error.code === "PGRST202" || /could not find the function/i.test(m)) {
+    return `The database is missing the ${functionName}() function. ` +
+      `Run supabase/migrations/0010_reporting_fixes.sql in the Supabase SQL Editor, then reload.`;
+  }
+  if (m.includes("NOT_ADMIN")) return "Only admins can view reports.";
+  if (m.includes("NOT_STAFF")) return "Your account is not an active staff account.";
+  return m || "Something went wrong loading this data.";
+}

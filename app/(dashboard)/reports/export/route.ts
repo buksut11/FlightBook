@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { createClient } from "@/lib/supabase/server";
+import { rpcErrorText } from "@/lib/rpc-errors";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,13 @@ export async function GET(req: NextRequest) {
   const to = req.nextUrl.searchParams.get("to") ?? "";
 
   const supabase = await createClient();
-  const { data } = await supabase.rpc("report_summary", { p_from: from, p_to: to });
+  const { data, error } = await supabase.rpc("report_summary", { p_from: from, p_to: to });
+  if (error) {
+    return new NextResponse(`Report export failed: ${rpcErrorText(error, "report_summary")}`, {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
   const r = (data ?? {}) as {
     total_revenue: number; bookings_count: number; discounts_total: number;
     by_agent: { agent: string; bookings: number; revenue: number }[];
