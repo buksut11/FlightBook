@@ -32,28 +32,40 @@ const discountItems = [
   { value: "fixed", label: "Fixed amount off" },
 ];
 
-const passengerTypeItems = [
-  { value: "adult", label: "Adult" },
-  { value: "child", label: "Child" },
-  { value: "infant", label: "Infant" },
-];
+const PASSENGER_TYPES: PassengerType[] = ["adult", "child", "infant"];
+
+const TYPE_LABELS: Record<PassengerType, string> = {
+  adult: "Adult", child: "Child", infant: "Infant",
+};
+
+function cabinFareLabel(f: FlightRow, cabin: CabinClass): string {
+  return PASSENGER_TYPES
+    .map((t) => `${formatMoney(fareFor(f, cabin, t), f.currency)} ${t}`)
+    .join(" / ");
+}
 
 function cabinItems(f: FlightRow) {
   return [
     {
       value: "economy",
-      label: `Economy — ${formatMoney(f.price_economy, f.currency)} adult (${f.seats_available_economy} left)`,
+      label: `Economy — ${cabinFareLabel(f, "economy")} (${f.seats_available_economy} left)`,
     },
     ...(f.price_business !== null
       ? [{
           value: "business",
-          label: `Business — ${formatMoney(f.price_business, f.currency)} adult (${f.seats_available_business} left)`,
+          label: `Business — ${cabinFareLabel(f, "business")} (${f.seats_available_business} left)`,
         }]
       : []),
   ];
 }
 
-const PASSENGER_TYPES: PassengerType[] = ["adult", "child", "infant"];
+// True when the flight has no dedicated child/infant fare for this cabin,
+// meaning those passengers are charged the adult fare.
+function usesAdultFallback(f: FlightRow, cabin: CabinClass): boolean {
+  return cabin === "economy"
+    ? f.price_economy_child === null || f.price_economy_infant === null
+    : f.price_business_child === null || f.price_business_infant === null;
+}
 
 export function Wizard({ flights }: { flights: FlightRow[] }) {
   const router = useRouter();
@@ -120,6 +132,19 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
       (tripType === "round_trip" && returnFlight ? fareFor(returnFlight, returnCabin, t) : 0);
     return { type: t, count, amount: each * count };
   }).filter((x): x is { type: PassengerType; count: number; amount: number } => x !== null);
+
+  // Passenger type choices priced per seat for the selected cabin(s),
+  // e.g. "Child — $110.00" (both legs combined on round trips).
+  const passengerTypeItems = PASSENGER_TYPES.map((t) => ({
+    value: t,
+    label: flight
+      ? `${TYPE_LABELS[t]} — ${formatMoney(
+          fareFor(flight, cabin, t) +
+            (tripType === "round_trip" && returnFlight ? fareFor(returnFlight, returnCabin, t) : 0),
+          flight.currency
+        )}`
+      : TYPE_LABELS[t],
+  }));
 
   const filteredFlights = flights.filter((f) => {
     const s = `${f.flight_number} ${f.origin?.code} ${f.origin?.city} ${f.destination?.code} ${f.destination?.city}`.toLowerCase();
@@ -261,9 +286,17 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
                   <p className="text-muted-foreground">{formatDateTime(f.departure_at)}</p>
                 </div>
                 <div className="text-right text-xs text-muted-foreground">
-                  <p>Economy: {f.seats_available_economy} left · {formatMoney(f.price_economy, f.currency)}</p>
+                  <p>
+                    Economy: {f.seats_available_economy} left · {formatMoney(f.price_economy, f.currency)} adult
+                    {f.price_economy_child !== null && ` · ${formatMoney(f.price_economy_child, f.currency)} child`}
+                    {f.price_economy_infant !== null && ` · ${formatMoney(f.price_economy_infant, f.currency)} infant`}
+                  </p>
                   {f.price_business !== null && (
-                    <p>Business: {f.seats_available_business} left · {formatMoney(f.price_business, f.currency)}</p>
+                    <p>
+                      Business: {f.seats_available_business} left · {formatMoney(f.price_business, f.currency)} adult
+                      {f.price_business_child !== null && ` · ${formatMoney(f.price_business_child, f.currency)} child`}
+                      {f.price_business_infant !== null && ` · ${formatMoney(f.price_business_infant, f.currency)} infant`}
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -361,6 +394,13 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
                 ))}
               </SelectContent>
             </Select>
+            {usesAdultFallback(flight, cabin) && (
+              <p className="text-xs text-muted-foreground">
+                This flight has no separate child/infant fare for {cabin} — those passengers
+                are charged the adult fare. An admin can set child and infant prices when
+                editing the flight on the <Link href="/flights" className="text-primary underline">Flights page</Link>.
+              </p>
+            )}
           </div>
 
           {tripType === "round_trip" && returnFlight && (
@@ -377,6 +417,12 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
                   ))}
                 </SelectContent>
               </Select>
+              {usesAdultFallback(returnFlight, returnCabin) && (
+                <p className="text-xs text-muted-foreground">
+                  This flight has no separate child/infant fare for {returnCabin} — those
+                  passengers are charged the adult fare.
+                </p>
+              )}
             </div>
           )}
 
@@ -457,6 +503,11 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
           </div>
 
           <div className="text-sm font-medium">
+            {fareBreakdown.map((fb) => (
+              <p key={fb.type} className="text-xs font-normal capitalize text-muted-foreground">
+                {fb.count} × {fb.type}: {formatMoney(fb.amount, flight.currency)}
+              </p>
+            ))}
             <p>
               Total{tripType === "round_trip" ? " (both legs)" : ""}: {formatMoney(grandTotal, flight.currency)}
             </p>
