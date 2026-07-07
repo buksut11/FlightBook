@@ -168,9 +168,6 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
       setCustomerId(c.id);
       setName(c.full_name);
       setEmail(c.email ?? "");
-      if (passengers.length === 1 && passengers[0].full_name === "") {
-        setPassengers([{ ...emptyPassenger, full_name: c.full_name }]);
-      }
       const { data: bal, error: balError } = await supabase
         .from("customer_balances")
         .select("outstanding")
