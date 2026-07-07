@@ -417,29 +417,34 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
             </CardContent>
           </Card>
 
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div className="grid gap-2">
-              <Label htmlFor="phone">Customer phone</Label>
-              <Input id="phone" value={phone} onChange={(e) => lookupCustomer(e.target.value)}
-                placeholder="09xxxxxxxx" />
-              {customerId && (
-                <p className="text-xs text-green-600">Existing customer found — details filled.</p>
-              )}
-              {customerId && prevBalance > 0 && flight && (
-                <p className="text-xs text-amber-600">
-                  Unpaid balance of {formatMoney(prevBalance, flight.currency)} from previous
-                  bookings — it will be added to this booking&apos;s total due.
-                </p>
-              )}
+          <div className="grid gap-2">
+            <div className="grid gap-2 sm:grid-cols-3 sm:items-start">
+              <div className="grid content-start gap-2">
+                <Label htmlFor="phone">Customer phone</Label>
+                <Input id="phone" value={phone} onChange={(e) => lookupCustomer(e.target.value)}
+                  placeholder="09xxxxxxxx" />
+              </div>
+              <div className="grid content-start gap-2">
+                <Label htmlFor="name">Customer name</Label>
+                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="grid content-start gap-2">
+                <Label htmlFor="email">Email (optional)</Label>
+                <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="name">Customer name</Label>
-              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email (optional)</Label>
-              <Input id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
+            {customerId && (
+              <p className="flex items-center gap-1.5 text-xs text-green-600">
+                <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
+                Existing customer found — details filled.
+              </p>
+            )}
+            {customerId && prevBalance > 0 && flight && (
+              <p className="rounded-md border border-amber-600 p-3 text-sm text-amber-600">
+                Unpaid balance of {formatMoney(prevBalance, flight.currency)} from previous
+                bookings — it will be added to this booking&apos;s total due.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-2">
