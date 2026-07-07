@@ -101,7 +101,10 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
   const seatsLeft = flight
     ? cabin === "economy" ? flight.seats_available_economy : flight.seats_available_business
     : 0;
-  const subtotal = flight ? legSubtotal(flight, cabin, passengers) : 0;
+  // Only passengers with a name entered count toward the price, so the blank
+  // starter row doesn't show a total before anyone has been added.
+  const pricedPassengers = passengers.filter((p) => p.full_name.trim().length > 0);
+  const subtotal = flight ? legSubtotal(flight, cabin, pricedPassengers) : 0;
 
   const returnFlight = useMemo(
     () => flights.find((f) => f.id === returnFlightId) ?? null,
@@ -112,7 +115,7 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
     [flights, flight]
   );
   const returnSubtotal =
-    tripType === "round_trip" && returnFlight ? legSubtotal(returnFlight, returnCabin, passengers) : 0;
+    tripType === "round_trip" && returnFlight ? legSubtotal(returnFlight, returnCabin, pricedPassengers) : 0;
   const combinedSubtotal = subtotal + returnSubtotal;
   const discountAmount =
     discountType === "percent" ? Math.min(combinedSubtotal, (combinedSubtotal * Number(discountValue || 0)) / 100)
@@ -125,7 +128,7 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
 
   // Per-type fare lines for both legs combined, e.g. "2 × Adult — $240".
   const fareBreakdown = PASSENGER_TYPES.map((t) => {
-    const count = passengers.filter((p) => p.passenger_type === t).length;
+    const count = pricedPassengers.filter((p) => p.passenger_type === t).length;
     if (count === 0 || !flight) return null;
     const each =
       fareFor(flight, cabin, t) +
@@ -502,21 +505,27 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
             </Button>
           </div>
 
-          <div className="text-sm font-medium">
-            {fareBreakdown.map((fb) => (
-              <p key={fb.type} className="text-xs font-normal capitalize text-muted-foreground">
-                {fb.count} × {fb.type}: {formatMoney(fb.amount, flight.currency)}
+          {pricedPassengers.length > 0 ? (
+            <div className="text-sm font-medium">
+              {fareBreakdown.map((fb) => (
+                <p key={fb.type} className="text-xs font-normal capitalize text-muted-foreground">
+                  {fb.count} × {fb.type}: {formatMoney(fb.amount, flight.currency)}
+                </p>
+              ))}
+              <p>
+                Total{tripType === "round_trip" ? " (both legs)" : ""}: {formatMoney(grandTotal, flight.currency)}
               </p>
-            ))}
-            <p>
-              Total{tripType === "round_trip" ? " (both legs)" : ""}: {formatMoney(grandTotal, flight.currency)}
+              {prevBalance > 0 && (
+                <p className="text-amber-600">
+                  Total due incl. previous balance: {formatMoney(totalDue, flight.currency)}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Enter a passenger name to see the total.
             </p>
-            {prevBalance > 0 && (
-              <p className="text-amber-600">
-                Total due incl. previous balance: {formatMoney(totalDue, flight.currency)}
-              </p>
-            )}
-          </div>
+          )}
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => setStep(0)}>Back</Button>
