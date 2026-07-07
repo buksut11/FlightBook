@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createBookingAction, checkDuplicatePending } from "./actions";
@@ -279,12 +280,32 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
 
           {filteredFlights.map((f) => (
             <Card key={f.id}
-              className={cn("cursor-pointer", flightId === f.id && "border-primary")}
-              onClick={() => setFlightId(f.id)}>
+              role="radio"
+              aria-checked={flightId === f.id}
+              className={cn(
+                "cursor-pointer transition-shadow",
+                flightId === f.id
+                  ? "bg-primary/5 ring-2 ring-primary"
+                  : "hover:ring-foreground/25"
+              )}
+              onClick={() => {
+                setFlightId(f.id);
+                // Keep dependent choices valid when the flight changes mid-wizard.
+                if (f.price_business === null) setCabin("economy");
+                if (returnFlight && new Date(returnFlight.departure_at) <= new Date(f.departure_at)) {
+                  setReturnFlightId(null);
+                }
+              }}>
               <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
                 <div>
-                  <p className="font-medium">
+                  <p className="flex items-center gap-1.5 font-medium">
+                    {flightId === f.id && <CheckCircle2 className="size-4 shrink-0 text-primary" aria-hidden />}
                     {f.flight_number} · {f.origin?.code} → {f.destination?.code}
+                    {flightId === f.id && (
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
+                        Selected
+                      </span>
+                    )}
                   </p>
                   <p className="text-muted-foreground">{formatDateTime(f.departure_at)}</p>
                 </div>
@@ -331,11 +352,29 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
               )}
               {returnEligible.map((f) => (
                 <Card key={f.id}
-                  className={cn("cursor-pointer", returnFlightId === f.id && "border-primary")}
-                  onClick={() => setReturnFlightId(f.id)}>
+                  role="radio"
+                  aria-checked={returnFlightId === f.id}
+                  className={cn(
+                    "cursor-pointer transition-shadow",
+                    returnFlightId === f.id
+                      ? "bg-primary/5 ring-2 ring-primary"
+                      : "hover:ring-foreground/25"
+                  )}
+                  onClick={() => {
+                    setReturnFlightId(f.id);
+                    if (f.price_business === null) setReturnCabin("economy");
+                  }}>
                   <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
                     <div>
-                      <p className="font-medium">{f.flight_number} · {f.origin?.code} → {f.destination?.code}</p>
+                      <p className="flex items-center gap-1.5 font-medium">
+                        {returnFlightId === f.id && <CheckCircle2 className="size-4 shrink-0 text-primary" aria-hidden />}
+                        {f.flight_number} · {f.origin?.code} → {f.destination?.code}
+                        {returnFlightId === f.id && (
+                          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
+                            Selected
+                          </span>
+                        )}
+                      </p>
                       <p className="text-muted-foreground">{formatDateTime(f.departure_at)}</p>
                     </div>
                     <p className="text-xs text-muted-foreground">
@@ -359,6 +398,25 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
       {/* STEP 1: customer + passengers + class */}
       {step === 1 && flight && (
         <div className="grid gap-4">
+          <Card className="bg-muted/40">
+            <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
+              <div className="grid gap-0.5">
+                <p className="font-medium">
+                  {tripType === "round_trip" ? "Outbound: " : "Flight: "}
+                  {flight.flight_number} · {flight.origin?.code} → {flight.destination?.code} · {formatDateTime(flight.departure_at)}
+                </p>
+                {tripType === "round_trip" && returnFlight && (
+                  <p className="font-medium">
+                    Return: {returnFlight.flight_number} · {returnFlight.origin?.code} → {returnFlight.destination?.code} · {formatDateTime(returnFlight.departure_at)}
+                  </p>
+                )}
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setStep(0)}>
+                Change flight
+              </Button>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-2 sm:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="phone">Customer phone</Label>
@@ -545,14 +603,23 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
           )}
           <Card>
             <CardContent className="grid gap-1 p-4 text-sm">
-              <p className="font-medium">
-                Outbound: {flight.flight_number} · {flight.origin?.code} → {flight.destination?.code} · {formatDateTime(flight.departure_at)}
-              </p>
-              {tripType === "round_trip" && returnFlight && (
-                <p className="font-medium">
-                  Return: {returnFlight.flight_number} · {returnFlight.origin?.code} → {returnFlight.destination?.code} · {formatDateTime(returnFlight.departure_at)}
-                </p>
-              )}
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="grid gap-1">
+                  <p className="font-medium">
+                    Outbound: {flight.flight_number} · {flight.origin?.code} → {flight.destination?.code} · {formatDateTime(flight.departure_at)}
+                    <span className="capitalize text-muted-foreground"> · {cabin}</span>
+                  </p>
+                  {tripType === "round_trip" && returnFlight && (
+                    <p className="font-medium">
+                      Return: {returnFlight.flight_number} · {returnFlight.origin?.code} → {returnFlight.destination?.code} · {formatDateTime(returnFlight.departure_at)}
+                      <span className="capitalize text-muted-foreground"> · {returnCabin}</span>
+                    </p>
+                  )}
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => setStep(0)}>
+                  Change flight
+                </Button>
+              </div>
               <p>Customer: {name} ({phone})</p>
               <p className="capitalize">Passengers: {passengers.length}</p>
               <ul className="list-inside list-disc text-muted-foreground">
