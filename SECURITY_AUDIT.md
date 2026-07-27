@@ -3,7 +3,7 @@
 **Date:** 2026-07-27
 **Scope:** Full application — Next.js 15 App Router frontend, server actions, route handlers, Supabase Postgres schema, RLS policies, SECURITY DEFINER RPCs, storage policies, dependencies, CI.
 **Commit audited:** `d56fd56`
-**Methodology:** Manual white-box review of every authentication path, authorization guard, RLS policy, database function, user-input sink, and dependency. No live instance was tested; findings are derived from source and are marked where runtime confirmation is advised.
+**Methodology:** Manual white-box review of every authentication path, authorization guard, RLS policy, database function, user-input sink, and dependency. No live Supabase instance was tested; findings are derived from source and are marked where runtime confirmation is advised. Findings 1, 2, 3 and 9 were subsequently confirmed and their fixes verified against a local PostgreSQL 16 instance — see [Verification](#verification-of-the-0011-fixes).
 
 ---
 
@@ -30,24 +30,26 @@ The good news is that this codebase already understands the principle: money-bea
 
 ## Findings summary
 
-| # | Severity | Finding |
-|---|----------|---------|
-| 1 | **High** | Any agent can issue themselves a 100%-discount (free) ticket — no discount ceiling or approval anywhere in the stack |
-| 2 | **High** | `record_payment` has no ownership check — any agent can fabricate a payment against any booking in the system |
-| 3 | **High** | Passenger-count is unbounded server-side — one API call can drain an entire flight's seat inventory |
-| 4 | **Medium** | PostgREST filter injection via search boxes (3 locations) |
-| 5 | **Medium** | CSV formula injection in the admin report export, via a self-editable field |
-| 6 | **Medium** | No security headers at all — clickjacking is live on every authenticated route |
-| 7 | **Medium** | 8 known-vulnerable dependencies (5 high), and no dependency scanning in CI |
-| 8 | **Medium** | Weak credential lifecycle: admin-chosen passwords, never rotated, no MFA, no lockout — undermines the whole `created_by` audit trail |
-| 9 | **Medium** | Financial-report tampering via unprotected booking columns |
-| 10 | **Low** | Payments are immutable with no reversal path — errors and fraud are both permanent |
-| 11 | **Low** | Helper database functions are executable by `anon` / `authenticated` |
-| 12 | **Low** | Bulk PII exposure: every agent can pull every passenger's government ID, unlogged |
-| 13 | **Low** | Avatar upload is validated client-side only, into a public bucket |
-| 14 | **Low** | `search_path` not pinned on functions called from `SECURITY DEFINER` context |
-| 15 | **Low** | The `app.rpc` bypass flag is a fragile design for a security control |
-| 16 | **Info** | CI does not run on the default branch |
+**Remediation status:** findings 1, 2, 3 and 9 are fixed in `supabase/migrations/0011_security_hardening.sql`. Each fix was verified by running the exploit against a real Postgres 16 instance before and after the migration — see [Verification](#verification-of-the-0011-fixes). The remaining findings are open.
+
+| # | Severity | Finding | Status |
+|---|----------|---------|--------|
+| 1 | **High** | Any agent can issue themselves a 100%-discount (free) ticket — no discount ceiling or approval anywhere in the stack | Fixed in 0011 |
+| 2 | **High** | `record_payment` has no ownership check — any agent can fabricate a payment against any booking in the system | Fixed in 0011 |
+| 3 | **High** | Passenger-count is unbounded server-side — one API call can drain an entire flight's seat inventory | Fixed in 0011 |
+| 4 | **Medium** | PostgREST filter injection via search boxes (3 locations) | Open |
+| 5 | **Medium** | CSV formula injection in the admin report export, via a self-editable field | Open |
+| 6 | **Medium** | No security headers at all — clickjacking is live on every authenticated route | Open |
+| 7 | **Medium** | 8 known-vulnerable dependencies (5 high), and no dependency scanning in CI | Open |
+| 8 | **Medium** | Weak credential lifecycle: admin-chosen passwords, never rotated, no MFA, no lockout — undermines the whole `created_by` audit trail | Open |
+| 9 | **Medium** | Financial-report tampering via unprotected booking columns | Fixed in 0011 |
+| 10 | **Low** | Payments are immutable with no reversal path — errors and fraud are both permanent | Open |
+| 11 | **Low** | Helper database functions are executable by `anon` / `authenticated` | Open |
+| 12 | **Low** | Bulk PII exposure: every agent can pull every passenger's government ID, unlogged | Open |
+| 13 | **Low** | Avatar upload is validated client-side only, into a public bucket | Open |
+| 14 | **Low** | `search_path` not pinned on functions called from `SECURITY DEFINER` context | Partly (0011) |
+| 15 | **Low** | The `app.rpc` bypass flag is a fragile design for a security control | Open |
+| 16 | **Info** | CI does not run on the default branch | Open |
 
 ---
 
@@ -460,6 +462,37 @@ Recording these explicitly, both because they represent real work done well and 
 
 ---
 
+## Verification of the 0011 fixes
+
+Findings 1, 2, 3 and 9 are addressed by `supabase/migrations/0011_security_hardening.sql`. Because these are database-layer controls that no unit test can reach, each was verified empirically: the full migration chain was applied to a real PostgreSQL 16 instance (with Supabase's `auth` and `storage` primitives stubbed), and each exploit was run twice — once against a database at `0010`, once against the same database after `0011`.
+
+**Confirming the vulnerabilities were real** (database at `0010`, acting as a non-admin agent):
+
+| Exploit | Result before 0011 |
+|---|---|
+| Book with `p_discount_value = 100`, `percent` | Succeeded — `subtotal=100.00`, **`total_amount=0.00`**, holding a real seat, `balance=0` so it never appears in any outstanding-balance report |
+| Book with 46 passengers on a 50-seat flight | Succeeded — `seats_available_economy` fell from 50 to 3 in one call, held indefinitely |
+| Agent B posts a `999999` payment on Agent A's booking | Succeeded — returned `{"paid": 999999.00, "status": "confirmed", "target": 4600.00}`, confirming a 4,600 booking with no money received |
+| Agent A sets `discount_type='none'` and reassigns `created_by` | Succeeded — `UPDATE 1`; the discount vanished from the report and the booking was re-attributed to another agent |
+
+**After applying 0011**, every one of those calls is rejected: `DISCOUNT_NEEDS_ADMIN:10`, `TOO_MANY_PASSENGERS:9`, `NOT_ALLOWED`, and `PROTECTED_COLUMNS` respectively. A percent value above 100 additionally raises `INVALID_DISCOUNT`, a non-positive payment raises `INVALID_AMOUNT`, an amount above the outstanding balance raises `OVERPAYMENT:<balance>`, and paying a settled booking raises `NOTHING_OWED`.
+
+**Legitimate behaviour was checked for regressions and is unchanged:**
+
+- A normal two-passenger booking (adult + child, tiered fares) succeeds.
+- An agent granting a discount at the 10% ceiling succeeds.
+- An **admin** granting a 100% discount succeeds — the ceiling gates agents, not authorised comps.
+- Partial payment then settlement works: `120` leaves `pending`, a further `80` flips the booking to `confirmed`.
+- An admin may still record a payment against another agent's booking.
+- Seat accounting is correct throughout, including rollback: the rejected 46-passenger booking left `seats_available` untouched.
+- A no-op `UPDATE` that writes a protected column to its existing value still succeeds, so an idempotent write from the application does not spuriously fail.
+
+The migration was also applied to a database that had already been exploited (to confirm it upgrades live, inconsistent data without error) and re-run three times to confirm idempotency.
+
+**What this does not cover:** the checks were exercised through the RPCs with `auth.uid()` stubbed, running as a superuser, so RLS policies themselves were not exercised — only the in-function authorization logic and the trigger. RLS behaviour is unchanged by this migration. The `0011` behaviour should still be smoke-tested against a real Supabase project before it is relied on in production.
+
+---
+
 ## Recommended remediation order
 
 1. **Finding 1** — discount ceiling in `create_booking`. Highest impact, smallest change.
@@ -471,4 +504,4 @@ Recording these explicitly, both because they represent real work done well and 
 7. **Finding 8** — forced password rotation. Larger effort, but it is what makes the audit trail mean anything.
 8. Remainder as hardening.
 
-Findings 1, 2, 3 and 9 are all in the database layer and could reasonably ship as a single `0011_security_hardening.sql` migration.
+Findings 1, 2, 3 and 9 shipped together as `0011_security_hardening.sql`; the numbering above reflects the original assessment, so items 1-3 and 9 are now done. The next open item by impact is finding 4 (filter injection), then 5, 6 and 7 — all of which are small, self-contained changes.

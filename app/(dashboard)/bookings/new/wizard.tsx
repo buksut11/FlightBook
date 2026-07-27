@@ -508,7 +508,9 @@ export function Wizard({ flights }: { flights: FlightRow[] }) {
               <>
                 <div className="grid gap-2">
                   <Label>{discountType === "percent" ? "Percent" : "Amount"}</Label>
-                  <Input type="number" min="0" step="0.01" value={discountValue}
+                  <Input type="number" min="0" step="0.01"
+                    max={discountType === "percent" ? "100" : undefined}
+                    value={discountValue}
                     onChange={(e) => setDiscountValue(e.target.value)} />
                 </div>
                 <div className="grid gap-2">

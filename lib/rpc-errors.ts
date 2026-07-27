@@ -21,6 +21,25 @@ export function mapRpcError(message: string): string {
   const returnBefore = m.match(/RETURN_BEFORE_OUTBOUND:(\S+)/);
   if (returnBefore) return `The return flight ${returnBefore[1]} departs before the outbound flight.`;
 
+  const needsAdmin = m.match(/DISCOUNT_NEEDS_ADMIN:([\d.]+)/);
+  if (needsAdmin) {
+    return `Discounts above ${Number(needsAdmin[1])}% need an admin. Ask an admin to make this booking.`;
+  }
+
+  const tooMany = m.match(/TOO_MANY_PASSENGERS:(\d+)/);
+  if (tooMany) return `A booking can hold at most ${tooMany[1]} passengers.`;
+
+  const overpay = m.match(/OVERPAYMENT:([\d.]+)/);
+  if (overpay) return `That is more than this booking owes (${overpay[1]} outstanding).`;
+
+  if (m.includes("INVALID_DISCOUNT")) return "That discount is not valid. A percentage must be between 0 and 100.";
+  if (m.includes("INVALID_BAGGAGE")) return "Extra baggage weight and fee cannot be negative.";
+  if (m.includes("INVALID_PASSENGER_TYPE")) return "Each passenger must be an adult, child, or infant.";
+  if (m.includes("PASSENGER_NAME_REQUIRED")) return "Every passenger needs a name.";
+  if (m.includes("INVALID_AMOUNT")) return "Enter a payment amount greater than zero.";
+  if (m.includes("NOTHING_OWED")) return "This booking is already paid in full.";
+  if (m.includes("PROTECTED_COLUMNS")) return "That change has to go through the booking actions.";
+
   if (m.includes("FLIGHT_NOT_FOUND")) return "That flight no longer exists.";
   if (m.includes("BOOKING_NOT_FOUND")) return "That booking no longer exists.";
   if (m.includes("ALREADY_CANCELLED")) return "This booking is already cancelled.";

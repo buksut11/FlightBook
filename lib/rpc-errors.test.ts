@@ -39,6 +39,56 @@ describe("mapRpcError", () => {
   });
 });
 
+describe("mapRpcError — 0011 security limits", () => {
+  it("maps DISCOUNT_NEEDS_ADMIN with the ceiling", () => {
+    expect(mapRpcError("DISCOUNT_NEEDS_ADMIN:10")).toBe(
+      "Discounts above 10% need an admin. Ask an admin to make this booking."
+    );
+  });
+  it("maps TOO_MANY_PASSENGERS with the cap", () => {
+    expect(mapRpcError("TOO_MANY_PASSENGERS:9")).toBe(
+      "A booking can hold at most 9 passengers."
+    );
+  });
+  it("maps OVERPAYMENT with the outstanding balance", () => {
+    expect(mapRpcError("OVERPAYMENT:250.00")).toBe(
+      "That is more than this booking owes (250.00 outstanding)."
+    );
+  });
+  it("maps INVALID_DISCOUNT", () => {
+    expect(mapRpcError("INVALID_DISCOUNT")).toContain("between 0 and 100");
+  });
+  it("maps NOTHING_OWED", () => {
+    expect(mapRpcError("NOTHING_OWED")).toBe("This booking is already paid in full.");
+  });
+  it("maps INVALID_AMOUNT", () => {
+    expect(mapRpcError("INVALID_AMOUNT")).toBe("Enter a payment amount greater than zero.");
+  });
+  it("maps INVALID_PASSENGER_TYPE", () => {
+    expect(mapRpcError("INVALID_PASSENGER_TYPE")).toBe(
+      "Each passenger must be an adult, child, or infant."
+    );
+  });
+  it("maps PASSENGER_NAME_REQUIRED", () => {
+    expect(mapRpcError("PASSENGER_NAME_REQUIRED")).toBe("Every passenger needs a name.");
+  });
+  it("maps INVALID_BAGGAGE", () => {
+    expect(mapRpcError("INVALID_BAGGAGE")).toContain("cannot be negative");
+  });
+  it("maps PROTECTED_COLUMNS without exposing the RPC names", () => {
+    const text = mapRpcError("PROTECTED_COLUMNS: use the booking RPC functions");
+    expect(text).toBe("That change has to go through the booking actions.");
+  });
+  it("still maps NOT_ALLOWED, which record_payment now also raises", () => {
+    expect(mapRpcError("NOT_ALLOWED")).toBe("You don't have permission to do that.");
+  });
+  it("finds the code when Supabase wraps the message", () => {
+    expect(
+      mapRpcError('failed to execute: DISCOUNT_NEEDS_ADMIN:10 (SQLSTATE P0001)')
+    ).toContain("need an admin");
+  });
+});
+
 describe("rpcErrorText", () => {
   it("points at the repair migration when the function is missing (PGRST202)", () => {
     const text = rpcErrorText(

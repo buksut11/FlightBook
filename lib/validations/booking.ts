@@ -38,6 +38,10 @@ export const newBookingSchema = z
   .refine((d) => d.discount_type === "none" || d.discount_value > 0, {
     message: "Enter a discount value",
     path: ["discount_value"],
+  })
+  .refine((d) => d.discount_type !== "percent" || d.discount_value <= 100, {
+    message: "A percentage discount cannot exceed 100",
+    path: ["discount_value"],
   });
 
 export type PassengerInput = z.infer<typeof passengerSchema>;

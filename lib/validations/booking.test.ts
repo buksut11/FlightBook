@@ -80,3 +80,33 @@ describe("newBookingSchema — round trip & extras", () => {
     expect(r.extra_baggage_fee).toBe(0);
   });
 });
+
+describe("newBookingSchema — discount bounds (0011)", () => {
+  const base = {
+    flight_id: "11111111-1111-1111-1111-111111111111",
+    cabin_class: "economy",
+    customer: { full_name: "Asha Ali", phone: "0907000001", email: "" },
+    passengers: [{ full_name: "Asha Ali", id_number: "", passenger_type: "adult" }],
+  };
+
+  it("accepts a percentage discount at the 100 boundary", () => {
+    expect(
+      newBookingSchema.safeParse({ ...base, discount_type: "percent", discount_value: 100 }).success
+    ).toBe(true);
+  });
+  it("rejects a percentage discount above 100", () => {
+    expect(
+      newBookingSchema.safeParse({ ...base, discount_type: "percent", discount_value: 101 }).success
+    ).toBe(false);
+  });
+  it("still allows a fixed discount above 100 (it is an amount, not a rate)", () => {
+    expect(
+      newBookingSchema.safeParse({ ...base, discount_type: "fixed", discount_value: 250 }).success
+    ).toBe(true);
+  });
+  it("rejects a negative discount", () => {
+    expect(
+      newBookingSchema.safeParse({ ...base, discount_type: "percent", discount_value: -5 }).success
+    ).toBe(false);
+  });
+});
