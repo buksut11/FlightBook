@@ -27,3 +27,24 @@ jobs:
 
       - name: Test
         run: npm test
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Gate on what ships. Build tooling is checked separately below and kept
+      # non-blocking, so a advisory in a CLI cannot stop a release.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit dev dependencies (advisory only)
+        run: npm audit --audit-level=high || true

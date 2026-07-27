@@ -3,7 +3,7 @@
 **Date:** 2026-07-27
 **Scope:** Full application — Next.js 15 App Router frontend, server actions, route handlers, Supabase Postgres schema, RLS policies, SECURITY DEFINER RPCs, storage policies, dependencies, CI.
 **Commit audited:** `d56fd56`
-**Methodology:** Manual white-box review of every authentication path, authorization guard, RLS policy, database function, user-input sink, and dependency. No live Supabase instance was tested; findings are derived from source and are marked where runtime confirmation is advised. Findings 1, 2, 3 and 9 were subsequently confirmed and their fixes verified against a local PostgreSQL 16 instance — see [Verification](#verification-of-the-0011-fixes).
+**Methodology:** Manual white-box review of every authentication path, authorization guard, RLS policy, database function, user-input sink, and dependency. No live Supabase instance was tested; findings are derived from source and are marked where runtime confirmation is advised. Findings 1, 2, 3 and 9 were subsequently confirmed and their fixes verified against a local PostgreSQL 16 instance; findings 4-7 were fixed and verified by unit test and by loading a real production build in headless Chromium.
 
 ---
 
@@ -30,17 +30,17 @@ The good news is that this codebase already understands the principle: money-bea
 
 ## Findings summary
 
-**Remediation status:** findings 1, 2, 3 and 9 are fixed in `supabase/migrations/0011_security_hardening.sql`. Each fix was verified by running the exploit against a real Postgres 16 instance before and after the migration — see [Verification](#verification-of-the-0011-fixes). The remaining findings are open.
+**Remediation status:** findings 1, 2, 3 and 9 are fixed in `supabase/migrations/0011_security_hardening.sql`, verified by running each exploit against a real Postgres 16 instance before and after the migration — see [Verification](#verification-of-the-0011-fixes). Findings 4, 5, 6 and 7 are fixed in application code, verified by unit tests and by a real browser load of the running build — see [Verification](#verification-of-the-application-layer-fixes-4-7).
 
 | # | Severity | Finding | Status |
 |---|----------|---------|--------|
 | 1 | **High** | Any agent can issue themselves a 100%-discount (free) ticket — no discount ceiling or approval anywhere in the stack | Fixed in 0011 |
 | 2 | **High** | `record_payment` has no ownership check — any agent can fabricate a payment against any booking in the system | Fixed in 0011 |
 | 3 | **High** | Passenger-count is unbounded server-side — one API call can drain an entire flight's seat inventory | Fixed in 0011 |
-| 4 | **Medium** | PostgREST filter injection via search boxes (3 locations) | Open |
-| 5 | **Medium** | CSV formula injection in the admin report export, via a self-editable field | Open |
-| 6 | **Medium** | No security headers at all — clickjacking is live on every authenticated route | Open |
-| 7 | **Medium** | 8 known-vulnerable dependencies (5 high), and no dependency scanning in CI | Open |
+| 4 | **Medium** | PostgREST filter injection via search boxes (3 locations) | Fixed |
+| 5 | **Medium** | CSV formula injection in the admin report export, via a self-editable field | Fixed |
+| 6 | **Medium** | No security headers at all — clickjacking is live on every authenticated route | Fixed |
+| 7 | **Medium** | 8 known-vulnerable dependencies (5 high), and no dependency scanning in CI | Fixed |
 | 8 | **Medium** | Weak credential lifecycle: admin-chosen passwords, never rotated, no MFA, no lockout — undermines the whole `created_by` audit trail | Open |
 | 9 | **Medium** | Financial-report tampering via unprotected booking columns | Fixed in 0011 |
 | 10 | **Low** | Payments are immutable with no reversal path — errors and fraud are both permanent | Open |
@@ -249,11 +249,20 @@ The application sets no security headers whatsoever. Missing:
 - **`postcss` ≤ 8.5.17** — three advisories, including arbitrary file read and path traversal via attacker-controlled `sourceMappingURL` in CSS comments (`GHSA-6g55-p6wh-862q`, `GHSA-r28c-9q8g-f849`), plus XSS via unescaped `</style>` (`GHSA-qx2v-qp2m-jg93`).
 - **`sharp` < 0.35.0** — inherited libvips CVEs `CVE-2026-33327`, `CVE-2026-33328`, `CVE-2026-35590`, `CVE-2026-35591`.
 
-Both arrive transitively through `next@15.5.20`; `next@15.5.22` resolves them.
+Both arrive transitively through `next@15.5.20`.
 
 The CI workflow (`.github/workflows/ci.yml`) runs lint, typecheck and tests but has **no `npm audit` step and no Dependabot configuration**, so nothing surfaces this automatically.
 
-**Fix:** Bump to `next@15.5.22`, add `npm audit --production --audit-level=high` to CI, and enable Dependabot.
+**Correction (found while remediating):** this section originally claimed `next@15.5.22` resolves all eight. It does not. The bump clears the eight Next.js advisories, but `next@15.5.22` still bundles `postcss@8.4.31` and declares `sharp: ^0.34.3`, so both remain vulnerable and need explicit `overrides`. Two further points only became visible once the tree was actually rebuilt:
+
+- **`shadcn` was in `dependencies`, not `devDependencies`.** It is a scaffolding CLI that no application file imports, and it dragged `@modelcontextprotocol/sdk` and `@hono/node-server` into the production dependency tree along with their advisories.
+- **`sharp` is never exercised.** Nothing in the app uses `next/image`, so the libvips CVEs were not reachable — which lowers the real severity of that half of the finding, and makes the override safe to apply.
+
+**Fix applied:** bump to `next@15.5.22`, move `shadcn` to `devDependencies`, pin `postcss ^8.5.23`, `sharp ^0.35.3`, `brace-expansion ^5.0.8` and `fast-uri ^3.1.4` via `overrides`, add an audit job to CI, and add `.github/dependabot.yml`.
+
+`npm audit --omit=dev` now reports **0 vulnerabilities**. Three moderate advisories remain in the dev-only `shadcn` CLI chain; CI gates on the production tree and reports the dev tree without failing the build, so a vulnerability in build tooling cannot block a release while a shipped one always will.
+
+Note that finding 16 still limits this: CI runs on pull requests and one stale branch, so the audit gate does not run on the default branch.
 
 *Positive note:* Next.js `15.5.20` is past the fix for **CVE-2025-29927** (the `x-middleware-subrequest` middleware-bypass, fixed in 15.2.3), so that well-known Next.js authentication bypass does **not** apply here. This was specifically checked.
 
@@ -493,6 +502,24 @@ The migration was also applied to a database that had already been exploited (to
 
 ---
 
+## Verification of the application-layer fixes (4-7)
+
+**Finding 4 — filter injection.** All three call sites now route the search term through `sanitizeSearchTerm` in `lib/search.ts`, which strips every character carrying meaning to PostgREST's filter grammar (`, . ( ) " \ : *`) or to SQL `LIKE` (`% _`), plus control characters. Apostrophes are deliberately kept: PostgREST binds values as parameters, so `'` is not an injection vector and names like O'Brien must stay searchable. `bookings/page.tsx` additionally filters its `in.(...)` id list through `isUuid`. A property test asserts that no metacharacter survives for any of the payloads in the finding, and `customerSearchFilter("x,id.not.is.null")` is confirmed to still produce exactly two filter terms.
+
+**Finding 5 — CSV formula injection.** `csvCell` now prefixes `=`, `+`, `-`, `@`, tab and CR with an apostrophe, and is applied to every cell rather than just `agent` and `method`. The `from`/`to` parameters are no longer interpolated raw: they are validated as real ISO calendar dates and the request is rejected with 400 otherwise, which closes the same input as a vector into both the CSV body and the `Content-Disposition` filename. Tests cover the HYPERLINK payload end to end, including the case where the payload's own commas force CSV quoting so the neutralising apostrophe lands inside the quotes.
+
+**Finding 6 — security headers.** Verified against a real production build, not just the config. Serving the built app and requesting `/login` returns `Content-Security-Policy` (with `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` and `Strict-Transport-Security`, and no longer returns `X-Powered-By`.
+
+Because a CSP that breaks the app is worse than no CSP, the page was then loaded in headless Chromium: **0 CSP violations, 0 console errors**, with the three.js login scene, Tailwind styling and the sign-in form all rendering correctly. The Supabase origin is derived from `NEXT_PUBLIC_SUPABASE_URL` at build time into `connect-src` (https and wss, for realtime) and `img-src` (avatars), which is what keeps the app working under `default-src 'self'`.
+
+Two deliberate limitations: `script-src` and `style-src` retain `'unsafe-inline'`, because Next.js inlines its hydration and streaming payloads and removing it requires threading a per-request nonce through middleware. The CSP is therefore defence in depth, not an XSS cure. `Strict-Transport-Security` omits `preload`, which is a long-lived commitment for the apex domain and should be an explicit decision by whoever owns the DNS.
+
+**Finding 7 — dependencies.** See the correction recorded in the finding itself: the original recommendation was incomplete. `npm audit --omit=dev` now reports 0 vulnerabilities, the production build succeeds with the overridden `postcss` and `sharp`, and all 113 unit tests pass.
+
+**What this does not cover:** the search and export fixes were verified by unit test against the sanitizer and the cell encoder, not by firing crafted requests at a live PostgREST instance, and the header checks were run against a build using placeholder Supabase credentials. Both should be smoke-tested against a real deployment. The CSP in particular is the change most likely to surface an issue only in production, where real avatar URLs and realtime websockets are exercised.
+
+---
+
 ## Recommended remediation order
 
 1. **Finding 1** — discount ceiling in `create_booking`. Highest impact, smallest change.
@@ -504,4 +531,4 @@ The migration was also applied to a database that had already been exploited (to
 7. **Finding 8** — forced password rotation. Larger effort, but it is what makes the audit trail mean anything.
 8. Remainder as hardening.
 
-Findings 1, 2, 3 and 9 shipped together as `0011_security_hardening.sql`; the numbering above reflects the original assessment, so items 1-3 and 9 are now done. The next open item by impact is finding 4 (filter injection), then 5, 6 and 7 — all of which are small, self-contained changes.
+Findings 1, 2, 3 and 9 shipped together as `0011_security_hardening.sql`, and findings 4-7 shipped as application-layer changes. The numbering above reflects the original assessment, so items 1-7 and 9 are now done. The highest-value remaining item is finding 8 (credential lifecycle), which underpins the `created_by` audit trail that findings 1, 2 and 9 all now depend on.

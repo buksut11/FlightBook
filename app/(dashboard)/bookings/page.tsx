@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getProfile } from "@/lib/auth/get-profile";
+import { sanitizeSearchTerm, isUuid } from "@/lib/search";
 import { createClient } from "@/lib/supabase/server";
 import type { Booking, BookingBalance, Profile } from "@/lib/types/database";
 import { BookingFilters } from "./filters";
@@ -34,15 +35,17 @@ export default async function BookingsPage({
 
   if (status) query = query.eq("status", status);
   if (agent) query = query.eq("created_by", agent);
-  if (q) {
+  const search = sanitizeSearchTerm(q);
+  if (search) {
     // PostgREST can't OR a base column with embedded-table columns in one filter,
     // so resolve matching customers first, then OR on base columns only.
     const { data: matched } = await supabase
       .from("customers")
       .select("id")
-      .or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
-    const ids = (matched ?? []).map((c) => c.id);
-    const orParts = [`reference.ilike.%${q}%`];
+      .or(`full_name.ilike.%${search}%,phone.ilike.%${search}%`);
+    // isUuid guards the in.(...) list, which is also built by concatenation
+    const ids = (matched ?? []).map((c) => c.id).filter(isUuid);
+    const orParts = [`reference.ilike.%${search}%`];
     if (ids.length > 0) orParts.push(`customer_id.in.(${ids.join(",")})`);
     query = query.or(orParts.join(","));
   }

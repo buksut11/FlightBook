@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getProfile } from "@/lib/auth/get-profile";
+import { customerSearchFilter } from "@/lib/search";
 import { createClient } from "@/lib/supabase/server";
 import type { CustomerBalance } from "@/lib/types/database";
 import { SearchInput } from "../customers/search-input";
@@ -24,7 +25,8 @@ export default async function StatementsPage({
     .order("outstanding", { ascending: false })
     .order("full_name")
     .limit(200);
-  if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
+  const search = customerSearchFilter(q);
+  if (search) query = query.or(search);
   const { data } = await query;
   const rows = (data ?? []) as CustomerBalance[];
 
